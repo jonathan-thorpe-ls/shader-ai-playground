@@ -228,11 +228,13 @@ public class NeuralNexusController : MonoBehaviour
     {
         if (!updateShader || modes == null || modes.Length == 0)
         {
+            Debug.LogWarning($"[NeuralNexus] Update skipped: updateShader={updateShader != null}, modes={(modes != null ? modes.Length.ToString() : "null")}");
             return;
         }
 
         if (buffersDirty)
         {
+            Debug.Log("[NeuralNexus] Buffers dirty, calling EnsureBuffers()");
             EnsureBuffers();
             buffersDirty = false;
         }
@@ -323,6 +325,8 @@ public class NeuralNexusController : MonoBehaviour
 
     private void EnsureBuffers()
     {
+        Debug.Log($"[NeuralNexus] EnsureBuffers: nodeCount={nodeCount}, trailCount={trailCount}, backgroundCount={backgroundCount}");
+        
         ReleaseIfCountMismatch(ref nodePositionSizeBuffer, nodeCount);
         ReleaseIfCountMismatch(ref nodeColorBuffer, nodeCount);
         ReleaseIfCountMismatch(ref trailPositionSizeBuffer, trailCount);
@@ -343,6 +347,8 @@ public class NeuralNexusController : MonoBehaviour
             AllocateIfNeeded(ref backgroundPositionSizeBuffer, backgroundCount, sizeof(float) * 4);
             AllocateIfNeeded(ref backgroundColorBuffer, backgroundCount, sizeof(float) * 4);
         }
+
+        Debug.Log($"[NeuralNexus] Buffers allocated: nodePositionSize={nodePositionSizeBuffer != null}, nodeColor={nodeColorBuffer != null}, trailPositionSize={trailPositionSizeBuffer != null}, trailColor={trailColorBuffer != null}, bgPositionSize={backgroundPositionSizeBuffer != null}, bgColor={backgroundColorBuffer != null}");
 
         BindBuffersToKernels();
     }
@@ -547,8 +553,16 @@ public class NeuralNexusController : MonoBehaviour
         Bounds bounds = new Bounds(transform.position, Vector3.one * radius * 2f);
         Matrix4x4 localToWorld = transform.localToWorldMatrix;
 
+        Debug.Log($"[NeuralNexus] HandleCameraRendering called for camera: {camera.name} (type: {camera.cameraType})");
+        Debug.Log($"[NeuralNexus] Transform position: {transform.position}, Bounds: center={bounds.center}, size={bounds.size}");
+        Debug.Log($"[NeuralNexus] Node count: {nodeCount}, Trail count: {trailCount}, Background count: {backgroundCount}");
+
         if (nodeMaterial && nodePositionSizeBuffer != null && nodeColorBuffer != null)
         {
+            Debug.Log($"[NeuralNexus] Rendering nodes: material={nodeMaterial.name}, shader={nodeMaterial.shader.name}");
+            Debug.Log($"[NeuralNexus] Node buffers: positionSize={nodePositionSizeBuffer.count} elements, color={nodeColorBuffer.count} elements");
+            Debug.Log($"[NeuralNexus] Node params: sizeScale={nodeSizeScale}, opacity={nodeGlobalOpacity}, glowEnabled={glowEnabled}, glowIntensity={(glowEnabled ? glowEnabledIntensity : glowDisabledIntensity)}");
+
             nodePropertyBlock ??= new MaterialPropertyBlock();
             nodePropertyBlock.SetMatrix(LocalToWorldId, localToWorld);
             nodePropertyBlock.SetFloat(NodeSizeScaleId, nodeSizeScale);
@@ -567,11 +581,20 @@ public class NeuralNexusController : MonoBehaviour
                 layer = gameObject.layer,
                 camera = camera
             };
+            
+            Debug.Log($"[NeuralNexus] Calling Graphics.RenderPrimitives for nodes: topology=Points, vertexCount={nodeCount}, instanceCount=1, layer={gameObject.layer}");
             Graphics.RenderPrimitives(nodeRenderParams, MeshTopology.Points, nodeCount, 1);
+        }
+        else
+        {
+            Debug.LogWarning($"[NeuralNexus] Skipping node rendering: material={nodeMaterial != null}, positionSizeBuffer={nodePositionSizeBuffer != null}, colorBuffer={nodeColorBuffer != null}");
         }
 
         if (trailsVisible && trailMaterial && trailPositionSizeBuffer != null && trailColorBuffer != null && trailCount > 0)
         {
+            Debug.Log($"[NeuralNexus] Rendering trails: material={trailMaterial.name}, shader={trailMaterial.shader.name}");
+            Debug.Log($"[NeuralNexus] Trail buffers: positionSize={trailPositionSizeBuffer.count} elements, color={trailColorBuffer.count} elements");
+
             trailPropertyBlock ??= new MaterialPropertyBlock();
             trailPropertyBlock.SetMatrix(LocalToWorldId, localToWorld);
             trailPropertyBlock.SetFloat(TrailSizeScaleId, trailSizeScale);
@@ -589,11 +612,20 @@ public class NeuralNexusController : MonoBehaviour
                 layer = gameObject.layer,
                 camera = camera
             };
+            
+            Debug.Log($"[NeuralNexus] Calling Graphics.RenderPrimitives for trails: topology=Points, vertexCount={trailCount}, instanceCount=1");
             Graphics.RenderPrimitives(trailRenderParams, MeshTopology.Points, trailCount, 1);
+        }
+        else if (trailsVisible)
+        {
+            Debug.LogWarning($"[NeuralNexus] Skipping trail rendering: material={trailMaterial != null}, positionSizeBuffer={trailPositionSizeBuffer != null}, colorBuffer={trailColorBuffer != null}, trailCount={trailCount}");
         }
 
         if (backgroundVisible && backgroundMaterial && backgroundPositionSizeBuffer != null && backgroundColorBuffer != null && backgroundCount > 0)
         {
+            Debug.Log($"[NeuralNexus] Rendering background: material={backgroundMaterial.name}, shader={backgroundMaterial.shader.name}");
+            Debug.Log($"[NeuralNexus] Background buffers: positionSize={backgroundPositionSizeBuffer.count} elements, color={backgroundColorBuffer.count} elements");
+
             backgroundPropertyBlock ??= new MaterialPropertyBlock();
             backgroundPropertyBlock.SetMatrix(LocalToWorldId, localToWorld);
             backgroundPropertyBlock.SetFloat(BackgroundOpacityId, 1f);
@@ -610,7 +642,13 @@ public class NeuralNexusController : MonoBehaviour
                 layer = gameObject.layer,
                 camera = camera
             };
+            
+            Debug.Log($"[NeuralNexus] Calling Graphics.RenderPrimitives for background: topology=Points, vertexCount={backgroundCount}, instanceCount=1");
             Graphics.RenderPrimitives(backgroundRenderParams, MeshTopology.Points, backgroundCount, 1);
+        }
+        else if (backgroundVisible)
+        {
+            Debug.LogWarning($"[NeuralNexus] Skipping background rendering: material={backgroundMaterial != null}, positionSizeBuffer={backgroundPositionSizeBuffer != null}, colorBuffer={backgroundColorBuffer != null}, backgroundCount={backgroundCount}");
         }
     }
 
