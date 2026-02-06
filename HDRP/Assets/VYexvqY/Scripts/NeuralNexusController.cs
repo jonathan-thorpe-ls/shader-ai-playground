@@ -618,6 +618,36 @@ public class NeuralNexusController : MonoBehaviour
         return modes[activeModeIndex].label;
     }
 
+    public bool AutoRotate
+    {
+        get => autoRotate;
+        set => autoRotate = value;
+    }
+
+    public bool DataFlow
+    {
+        get => dataFlow;
+        set => dataFlow = value;
+    }
+
+    public bool TrailsVisible
+    {
+        get => trailsVisible;
+        set => trailsVisible = value;
+    }
+
+    public bool BackgroundVisible
+    {
+        get => backgroundVisible;
+        set => backgroundVisible = value;
+    }
+
+    public bool GlowEnabled
+    {
+        get => glowEnabled;
+        set => glowEnabled = value;
+    }
+
     public void SetAutoRotate(bool enabled)
     {
         autoRotate = enabled;
