@@ -1,0 +1,377 @@
+#pragma kernel UpdateNodes
+#pragma kernel UpdateTrails
+#pragma kernel UpdateBackground
+
+#define PI 3.14159265358979323846
+#define TWO_PI 6.28318530717958647692
+#define GOLDEN_ANGLE 2.39996322972865332
+
+RWStructuredBuffer<float4> _NodePositionSize;
+RWStructuredBuffer<float4> _NodeColor;
+RWStructuredBuffer<float4> _TrailPositionSize;
+RWStructuredBuffer<float4> _TrailColor;
+RWStructuredBuffer<float4> _BackgroundPositionSize;
+RWStructuredBuffer<float4> _BackgroundColor;
+
+int _NodeCount;
+int _TrailCount;
+int _BackgroundCount;
+float _Time;
+float _DeltaTime;
+int _ModeFrom;
+int _ModeTo;
+float _Transition;
+float _FlowToggle;
+float _TrailVisibility;
+int _ModeCount;
+int _PaletteSlice;
+
+float4 _ModeParams[4];
+float4 _PaletteColors[40];
+float4 _TrailParams;
+float4 _BackgroundParams;
+float4 _BackgroundColorA;
+float4 _BackgroundColorB;
+
+float RandomFloat(uint index, uint salt)
+{
+    float seed = (float)index * 12.9898f + (float)salt * 78.233f + 37.719f;
+    return frac(sin(seed) * 43758.5453f);
+}
+
+float3 RotateAxis(float3 value, float3 axis, float angle)
+{
+    axis = normalize(axis);
+    float s = sin(angle);
+    float c = cos(angle);
+    return value * c + cross(axis, value) * s + axis * dot(axis, value) * (1.0f - c);
+}
+
+int SelectPaletteIndex(uint id, int mode)
+{
+    int slice = max(_PaletteSlice, 1);
+    mode = clamp(mode, 0, max(_ModeCount - 1, 0));
+
+    if (mode == 0)
+    {
+        int channelCount = 12;
+        float t = ((float)id + 0.5f) / max(1.0f, (float)_NodeCount);
+        int channel = (int)floor(t * channelCount);
+        channel = clamp(channel, 0, channelCount - 1);
+        return channel % slice;
+    }
+
+    if (mode == 1)
+    {
+        float layerCount = 10.0f;
+        float nodesPerLayer = max(1.0f, (float)_NodeCount / layerCount);
+        int layer = (int)floor((float)id / nodesPerLayer);
+        layer = clamp(layer, 0, (int)layerCount - 1);
+        return layer % slice;
+    }
+
+    float coreRatio = 0.25f;
+    uint coreCount = (uint)max(1, (int)((float)_NodeCount * coreRatio));
+    if (id < coreCount)
+    {
+        return (int)(id % min((uint)slice, 4u));
+    }
+
+    int pool = max(slice - 4, 1);
+    uint remaining = id - coreCount;
+    return 4 + (int)(remaining % (uint)pool);
+}
+
+float4 SampleModeColor(uint id, int mode, float variation)
+{
+    mode = clamp(mode, 0, max(_ModeCount - 1, 0));
+    int slice = max(_PaletteSlice, 1);
+    int paletteIndex = SelectPaletteIndex(id, mode);
+    paletteIndex = clamp(paletteIndex, 0, slice - 1);
+    int offset = mode * slice + paletteIndex;
+
+    float4 color = _PaletteColors[offset];
+    float4 modeParams = _ModeParams[mode];
+    float brightness = lerp(modeParams.z, modeParams.w, saturate(variation));
+    color.rgb *= brightness;
+    color.a = 1.0f;
+    return color;
+}
+
+void AssignNodeProperties(uint id, int mode, out float size, out float4 color)
+{
+    mode = clamp(mode, 0, max(_ModeCount - 1, 0));
+    float rand0 = RandomFloat(id, (uint)(mode * 131 + 17));
+    float rand1 = RandomFloat(id, (uint)(mode * 193 + 71));
+
+    float4 modeParams = _ModeParams[mode];
+    float baseSize = modeParams.x;
+    float sizeJitter = modeParams.y;
+
+    size = max(0.05f, baseSize + (rand1 - 0.5f) * sizeJitter * 2.0f);
+    color = SampleModeColor(id, mode, rand0);
+}
+
+float3 GenerateHarmonicSphere(uint id, float time, float flow)
+{
+    float nodeCountF = max(1.0f, (float)_NodeCount);
+    float t = ((float)id + 0.5f) / nodeCountF;
+    float phi = acos(1.0f - 2.0f * t);
+    float theta = GOLDEN_ANGLE * (float)id;
+    float radius = 80.0f;
+    float perturb = 0.2f * (sin(5.0f * phi) * cos(3.0f * theta) + cos(4.0f * phi) * sin(2.0f * theta));
+    float r = radius * (1.0f + perturb);
+
+    float3 pos = float3(
+        r * sin(phi) * cos(theta),
+        r * sin(phi) * sin(theta),
+        r * cos(phi)
+    );
+
+    if (flow > 0.5f)
+    {
+        pos = RotateAxis(pos, float3(0.0f, 1.0f, 0.0f), time * 0.25f);
+    }
+
+    return pos;
+}
+
+float3 GenerateToroidalVortex(uint id, float time, float flow)
+{
+    float nodeCountF = max(1.0f, (float)_NodeCount);
+    float t = ((float)id + 0.5f) / nodeCountF;
+    float theta = t * TWO_PI;
+    float phi = theta * 12.0f + GOLDEN_ANGLE * (float)id * 0.6f;
+    float major = 70.0f;
+    float minor = 25.0f + sin(theta * 3.0f) * 5.0f;
+
+    float x = (major + minor * cos(phi)) * cos(theta);
+    float y = (major + minor * cos(phi)) * sin(theta);
+    float z = minor * sin(phi) + cos(theta * 4.0f) * 10.0f;
+
+    float3 pos = float3(x, y, z);
+    if (flow > 0.5f)
+    {
+        float swirl = 0.35f + sin(theta * 5.0f) * 0.05f;
+        pos = RotateAxis(pos, normalize(float3(0.25f, 1.0f, 0.15f)), time * swirl);
+    }
+
+    return pos;
+}
+
+float3 GenerateNebulaCore(uint id, float time, float flow)
+{
+    float coreRatio = 0.25f;
+    uint coreCount = (uint)max(1, (int)((float)_NodeCount * coreRatio));
+
+    if (id < coreCount)
+    {
+        float t = ((float)id + 0.5f) / coreCount;
+        float phi = acos(1.0f - 2.0f * t);
+        float theta = GOLDEN_ANGLE * (float)id + sin(t * 10.0f) * 0.5f;
+        float radius = 25.0f * pow(RandomFloat(id, 311u), 1.5f);
+
+        float3 pos = float3(
+            radius * sin(phi) * cos(theta),
+            radius * sin(phi) * sin(theta),
+            radius * cos(phi) + sin(theta * 2.0f) * 2.0f
+        );
+
+        if (flow > 0.5f)
+        {
+            pos = RotateAxis(pos, normalize(float3(0.3f, 1.0f, 0.1f)), time * 0.4f);
+        }
+
+        return pos;
+    }
+
+    uint ringParticles = (uint)max(1, _NodeCount - (int)coreCount);
+    uint ringIndex = id - coreCount;
+    uint numRings = 8u;
+    float nodesPerRing = max(1.0f, (float)ringParticles / numRings);
+    float ringNum = floor((float)ringIndex / nodesPerRing);
+    ringNum = clamp(ringNum, 0.0f, (float)numRings - 1.0f);
+
+    float nodeInRing = (float)ringIndex - ringNum * nodesPerRing;
+    float nodeT = nodeInRing / nodesPerRing;
+    float angle = nodeT * TWO_PI + sin(ringNum * 2.0f) * 0.3f;
+    float baseRadius = 35.0f + ringNum * 10.0f;
+    float ringRadius = baseRadius + sin(angle * 4.0f) * 5.0f;
+
+    float tiltAngle = (fmod(ringNum, 2.0f) < 0.5f ? 1.0f : -1.0f) * (PI / 6.0f + ringNum * PI / 15.0f);
+    float axisAngle = ringNum * PI / 4.0f;
+    float3 axis = normalize(float3(sin(axisAngle), cos(axisAngle), sin(axisAngle * 2.0f)));
+
+    float3 pos = float3(cos(angle) * ringRadius, 0.0f, sin(angle) * ringRadius);
+    pos = RotateAxis(pos, axis, tiltAngle);
+
+    if (flow > 0.5f)
+    {
+        float spin = 0.25f + ringNum * 0.04f;
+        pos = RotateAxis(pos, axis, time * spin);
+    }
+
+    return pos;
+}
+
+float3 GenerateModePosition(uint id, int mode, float time, float flow)
+{
+    mode = clamp(mode, 0, max(_ModeCount - 1, 0));
+
+    if (mode == 0)
+    {
+        return GenerateHarmonicSphere(id, time, flow);
+    }
+
+    if (mode == 1)
+    {
+        return GenerateToroidalVortex(id, time, flow);
+    }
+
+    return GenerateNebulaCore(id, time, flow);
+}
+
+float3 GenerateTrailPosition(uint id, int mode, float time, float flow)
+{
+    float rand = RandomFloat(id, 503u);
+    mode = clamp(mode, 0, max(_ModeCount - 1, 0));
+
+    if (mode == 0)
+    {
+        int channelCount = 12;
+        float packet = frac(((float)id / max(1.0f, (float)_TrailCount)) + time * 0.22f) * 140.0f - 70.0f;
+        float channel = floor(rand * channelCount);
+        float channelAngle = channel / channelCount * TWO_PI;
+        float channelRadius = 20.0f + channel * 5.0f;
+        float swirl = packet * 0.12f + channelAngle + rand * TWO_PI;
+        float jitter = (rand - 0.5f) * 4.0f;
+        float radius = channelRadius + jitter;
+        return float3(cos(swirl) * radius, packet, sin(swirl) * radius);
+    }
+
+    if (mode == 1)
+    {
+        float bandCount = 8.0f;
+        float nodesPerBand = max(1.0f, (float)_TrailCount / bandCount);
+        float band = floor((float)id / nodesPerBand);
+        float angle = rand * TWO_PI + time * (0.8f + band * 0.12f);
+        float radius = 34.0f + band * 6.0f;
+        float vertical = (band - (bandCount - 1.0f) * 0.5f) * 10.0f;
+        float flutter = sin(time * 3.0f + rand * 16.0f) * 5.0f;
+        return float3(cos(angle) * radius, vertical + flutter, sin(angle) * radius);
+    }
+
+    float ringCount = 6.0f;
+    float nodesPerRing = max(1.0f, (float)_TrailCount / ringCount);
+    float ring = floor((float)id / nodesPerRing);
+    float angle = rand * TWO_PI + time * (0.6f + ring * 0.1f);
+    float radius = 30.0f + ring * 6.5f;
+    float3 pos = float3(cos(angle) * radius, sin(time * 1.8f + rand * 14.0f) * 12.0f, sin(angle) * radius);
+    float3 axis = normalize(float3(0.25f, 1.0f, 0.35f));
+    return RotateAxis(pos, axis, ring * 0.45f);
+}
+
+[numthreads(256, 1, 1)]
+void UpdateNodes(uint3 threadId : SV_DispatchThreadID)
+{
+    uint id = threadId.x;
+    if (id >= (uint)_NodeCount)
+    {
+        return;
+    }
+
+    float flow = _FlowToggle;
+    float3 fromPos = GenerateModePosition(id, _ModeFrom, _Time, flow);
+    float3 toPos = GenerateModePosition(id, _ModeTo, _Time, flow);
+    float3 position = lerp(fromPos, toPos, _Transition);
+
+    float sizeFrom;
+    float4 colorFrom;
+    AssignNodeProperties(id, _ModeFrom, sizeFrom, colorFrom);
+
+    float sizeTo;
+    float4 colorTo;
+    AssignNodeProperties(id, _ModeTo, sizeTo, colorTo);
+
+    float size = lerp(sizeFrom, sizeTo, _Transition);
+    float4 color = lerp(colorFrom, colorTo, _Transition);
+
+    _NodePositionSize[id] = float4(position, size);
+    _NodeColor[id] = color;
+}
+
+[numthreads(256, 1, 1)]
+void UpdateTrails(uint3 threadId : SV_DispatchThreadID)
+{
+    uint id = threadId.x;
+    if (id >= (uint)_TrailCount)
+    {
+        return;
+    }
+
+    float flow = _FlowToggle;
+    float3 fromPos = GenerateTrailPosition(id, _ModeFrom, _Time, flow);
+    float3 toPos = GenerateTrailPosition(id, _ModeTo, _Time, flow);
+    float3 position = lerp(fromPos, toPos, _Transition);
+
+    float baseSize = _TrailParams.x;
+    float sizeJitter = _TrailParams.y;
+    float opacityMin = _TrailParams.z;
+    float opacityMax = _TrailParams.w;
+
+    float sizeNoise = RandomFloat(id, 613u);
+    float opacityNoise = RandomFloat(id, 827u);
+
+    float size = max(0.05f, baseSize + sizeNoise * sizeJitter);
+    float opacity = lerp(opacityMin, opacityMax, opacityNoise) * _TrailVisibility;
+
+    float4 colorFrom = SampleModeColor(id, _ModeFrom, RandomFloat(id, 199u));
+    float4 colorTo = SampleModeColor(id, _ModeTo, RandomFloat(id, 293u));
+    float4 color = lerp(colorFrom, colorTo, _Transition);
+    color.a = opacity;
+
+    _TrailPositionSize[id] = float4(position, size);
+    _TrailColor[id] = color;
+}
+
+[numthreads(256, 1, 1)]
+void UpdateBackground(uint3 threadId : SV_DispatchThreadID)
+{
+    uint id = threadId.x;
+    if (id >= (uint)_BackgroundCount)
+    {
+        return;
+    }
+
+    float radiusNoise = RandomFloat(id, 31u);
+    float thetaNoise = RandomFloat(id, 47u);
+    float phiNoise = RandomFloat(id, 89u);
+
+    float radius = lerp(_BackgroundParams.x, _BackgroundParams.y, radiusNoise);
+    float theta = thetaNoise * TWO_PI;
+    float phi = acos(1.0f - 2.0f * phiNoise);
+
+    float3 basePos = float3(
+        radius * sin(phi) * cos(theta),
+        radius * sin(phi) * sin(theta),
+        radius * cos(phi)
+    );
+
+    float3 axis = normalize(float3(0.3f, 1.0f, 0.5f));
+    float swirl = (_Time * 0.04f) + (thetaNoise - 0.5f) * 0.6f;
+    float3 position = RotateAxis(basePos, axis, swirl);
+
+    float twinkle = sin(_Time * _BackgroundParams.z + phiNoise * TWO_PI);
+    float sparkle = lerp(0.3f, 1.0f, pow(RandomFloat(id, 113u), 3.0f));
+    float intensity = saturate(0.5f + 0.5f * twinkle * _BackgroundParams.w) * sparkle;
+
+    float blend = RandomFloat(id, 149u);
+    float4 color = lerp(_BackgroundColorA, _BackgroundColorB, blend);
+    color.rgb *= intensity;
+    color.a = 1.0f;
+
+    float size = 0.8f + RandomFloat(id, 173u) * 1.9f;
+
+    _BackgroundPositionSize[id] = float4(position, size);
+    _BackgroundColor[id] = color;
+}
