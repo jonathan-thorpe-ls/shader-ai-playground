@@ -189,6 +189,9 @@ public class NeuralNexusController : MonoBehaviour
     private void OnEnable()
     {
         Debug.Log("[NeuralNexus] OnEnable called");
+        Debug.Log($"Graphics API: {SystemInfo.graphicsDeviceType}");
+        Debug.Log($"Graphics Device: {SystemInfo.graphicsDeviceName}");
+        Debug.Log($"Graphics Version: {SystemInfo.graphicsDeviceVersion}");
         EnsureModeDefaults();
         AcquireKernels();
         Debug.Log($"[NeuralNexus] Kernels acquired: nodeKernel={nodeKernel}, trailKernel={trailKernel}, backgroundKernel={backgroundKernel}");

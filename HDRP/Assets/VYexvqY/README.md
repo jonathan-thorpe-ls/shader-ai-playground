@@ -69,3 +69,8 @@ public void SetModeBaseColor(int modeIndex, Color color);
 - Hook Cinemachine or Timeline once the render stack is integrated; the controller respects transform changes every frame.
 - To push into XR later, swap the point shaders for VFX Graph equivalents while reusing the compute buffers, keeping palette generation on the CPU.
 - The palette generator can be replaced with artist-authored gradients by disabling auto regeneration and populating the palette array directly before calling UploadModeData.
+
+## Troubleshooting 
+
+Seems https://docs.unity3d.com/6000.3/Documentation/ScriptReference/GraphicsBuffer.Target.Structured.html
+DirectX 11 does not allow Index or ::Vertex buffers to also be Structured. For compute shader mesh data access with DirectX 11 compatibility, it is best to use Raw.
