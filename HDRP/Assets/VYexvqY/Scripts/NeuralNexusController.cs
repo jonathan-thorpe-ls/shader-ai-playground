@@ -513,18 +513,24 @@ public class NeuralNexusController : MonoBehaviour
 
         if (nodeKernel >= 0 && nodeCount > 0 && nodePositionSizeBuffer != null && nodeColorBuffer != null)
         {
+            updateShader.SetBuffer(nodeKernel, NodePositionSizeId, nodePositionSizeBuffer);
+            updateShader.SetBuffer(nodeKernel, NodeColorId, nodeColorBuffer);
             int groups = Mathf.CeilToInt(nodeCount / (float)ThreadGroupSize);
             updateShader.Dispatch(nodeKernel, groups, 1, 1);
         }
 
         if (trailKernel >= 0 && trailCount > 0 && trailPositionSizeBuffer != null && trailColorBuffer != null)
         {
+            updateShader.SetBuffer(trailKernel, TrailPositionSizeId, trailPositionSizeBuffer);
+            updateShader.SetBuffer(trailKernel, TrailColorId, trailColorBuffer);
             int groups = Mathf.CeilToInt(trailCount / (float)ThreadGroupSize);
             updateShader.Dispatch(trailKernel, groups, 1, 1);
         }
 
         if (backgroundVisible && backgroundKernel >= 0 && backgroundCount > 0 && backgroundPositionSizeBuffer != null && backgroundColorBuffer != null)
         {
+            updateShader.SetBuffer(backgroundKernel, BackgroundPositionSizeId, backgroundPositionSizeBuffer);
+            updateShader.SetBuffer(backgroundKernel, BackgroundColorId, backgroundColorBuffer);
             int groups = Mathf.CeilToInt(backgroundCount / (float)ThreadGroupSize);
             updateShader.Dispatch(backgroundKernel, groups, 1, 1);
         }
@@ -545,11 +551,12 @@ public class NeuralNexusController : MonoBehaviour
         {
             nodePropertyBlock ??= new MaterialPropertyBlock();
             nodePropertyBlock.SetMatrix(LocalToWorldId, localToWorld);
-            nodePropertyBlock.SetBuffer(NodePositionSizeId, nodePositionSizeBuffer);
-            nodePropertyBlock.SetBuffer(NodeColorId, nodeColorBuffer);
             nodePropertyBlock.SetFloat(NodeSizeScaleId, nodeSizeScale);
             nodePropertyBlock.SetFloat(NodeOpacityId, nodeGlobalOpacity);
             nodePropertyBlock.SetFloat(GlowIntensityId, glowEnabled ? glowEnabledIntensity : glowDisabledIntensity);
+
+            nodeMaterial.SetBuffer(NodePositionSizeId, nodePositionSizeBuffer);
+            nodeMaterial.SetBuffer(NodeColorId, nodeColorBuffer);
 
             Graphics.DrawProcedural(nodeMaterial, bounds, MeshTopology.Points, nodeCount, 1, camera, nodePropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
         }
@@ -558,10 +565,11 @@ public class NeuralNexusController : MonoBehaviour
         {
             trailPropertyBlock ??= new MaterialPropertyBlock();
             trailPropertyBlock.SetMatrix(LocalToWorldId, localToWorld);
-            trailPropertyBlock.SetBuffer(TrailPositionSizeId, trailPositionSizeBuffer);
-            trailPropertyBlock.SetBuffer(TrailColorId, trailColorBuffer);
             trailPropertyBlock.SetFloat(TrailSizeScaleId, trailSizeScale);
             trailPropertyBlock.SetFloat(TrailOpacityId, trailGlobalOpacity);
+
+            trailMaterial.SetBuffer(TrailPositionSizeId, trailPositionSizeBuffer);
+            trailMaterial.SetBuffer(TrailColorId, trailColorBuffer);
 
             Graphics.DrawProcedural(trailMaterial, bounds, MeshTopology.Points, trailCount, 1, camera, trailPropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
         }
@@ -570,9 +578,10 @@ public class NeuralNexusController : MonoBehaviour
         {
             backgroundPropertyBlock ??= new MaterialPropertyBlock();
             backgroundPropertyBlock.SetMatrix(LocalToWorldId, localToWorld);
-            backgroundPropertyBlock.SetBuffer(BackgroundPositionSizeId, backgroundPositionSizeBuffer);
-            backgroundPropertyBlock.SetBuffer(BackgroundColorId, backgroundColorBuffer);
             backgroundPropertyBlock.SetFloat(BackgroundOpacityId, 1f);
+
+            backgroundMaterial.SetBuffer(BackgroundPositionSizeId, backgroundPositionSizeBuffer);
+            backgroundMaterial.SetBuffer(BackgroundColorId, backgroundColorBuffer);
 
             Graphics.DrawProcedural(backgroundMaterial, bounds, MeshTopology.Points, backgroundCount, 1, camera, backgroundPropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
         }
