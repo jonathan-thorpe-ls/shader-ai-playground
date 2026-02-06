@@ -1,6 +1,10 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
+
 /// <summary>
 /// Handles input for the MorphingWireframeController using Unity's new Input System.
 /// Triggers pulses on left mouse click at the current mouse position.
@@ -9,6 +13,8 @@ public class MorphingWireframeInput : MonoBehaviour
 {
     [SerializeField]
     private MorphingWireframeController controller;
+
+    public MorphingWireframeController Controller => controller;
 
     private void Reset()
     {
@@ -35,3 +41,26 @@ public class MorphingWireframeInput : MonoBehaviour
         }
     }
 }
+
+#if UNITY_EDITOR
+[CustomEditor(typeof(MorphingWireframeInput))]
+public class MorphingWireframeInputEditor : Editor
+{
+    public override void OnInspectorGUI()
+    {
+        DrawDefaultInspector();
+
+        MorphingWireframeInput input = (MorphingWireframeInput)target;
+
+        EditorGUILayout.Space();
+
+        using (new EditorGUI.DisabledScope(input.Controller == null))
+        {
+            if (GUILayout.Button("Toggle Morph"))
+            {
+                input.Controller.ToggleMorph();
+            }
+        }
+    }
+}
+#endif

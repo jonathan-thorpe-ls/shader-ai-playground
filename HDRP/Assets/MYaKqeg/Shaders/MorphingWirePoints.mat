@@ -26,8 +26,8 @@ Material:
     m_Ints: []
     m_Floats:
     - _BaseSize: 0.5
-    - _ColorIntensity: 1
-    - _PulseBrightness: 0.5
+    - _ColorIntensity: 10
+    - _PulseBrightness: 1.36
     - _PulseSizeBoost: 5
     - _PulseThickness: 4
     m_Colors: []
