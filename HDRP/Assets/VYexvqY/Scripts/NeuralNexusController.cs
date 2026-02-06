@@ -188,9 +188,13 @@ public class NeuralNexusController : MonoBehaviour
 
     private void OnEnable()
     {
+        Debug.Log("[NeuralNexus] OnEnable called");
         EnsureModeDefaults();
         AcquireKernels();
+        Debug.Log($"[NeuralNexus] Kernels acquired: nodeKernel={nodeKernel}, trailKernel={trailKernel}, backgroundKernel={backgroundKernel}");
+        Debug.Log($"[NeuralNexus] updateShader={updateShader != null}, nodeMaterial={nodeMaterial != null}, trailMaterial={trailMaterial != null}, backgroundMaterial={backgroundMaterial != null}");
         RenderPipelineManager.beginCameraRendering += HandleCameraRendering;
+        Debug.Log("[NeuralNexus] Subscribed to RenderPipelineManager.beginCameraRendering");
         buffersDirty = true;
     }
 
@@ -522,7 +526,12 @@ public class NeuralNexusController : MonoBehaviour
             updateShader.SetBuffer(nodeKernel, NodePositionSizeId, nodePositionSizeBuffer);
             updateShader.SetBuffer(nodeKernel, NodeColorId, nodeColorBuffer);
             int groups = Mathf.CeilToInt(nodeCount / (float)ThreadGroupSize);
+            Debug.Log($"[NeuralNexus] Dispatching node compute: kernel={nodeKernel}, groups={groups}, nodeCount={nodeCount}");
             updateShader.Dispatch(nodeKernel, groups, 1, 1);
+        }
+        else
+        {
+            Debug.LogWarning($"[NeuralNexus] Node compute NOT dispatched: kernel={nodeKernel}, nodeCount={nodeCount}, positionSizeBuffer={nodePositionSizeBuffer != null}, colorBuffer={nodeColorBuffer != null}");
         }
 
         if (trailKernel >= 0 && trailCount > 0 && trailPositionSizeBuffer != null && trailColorBuffer != null)
@@ -530,7 +539,12 @@ public class NeuralNexusController : MonoBehaviour
             updateShader.SetBuffer(trailKernel, TrailPositionSizeId, trailPositionSizeBuffer);
             updateShader.SetBuffer(trailKernel, TrailColorId, trailColorBuffer);
             int groups = Mathf.CeilToInt(trailCount / (float)ThreadGroupSize);
+            Debug.Log($"[NeuralNexus] Dispatching trail compute: kernel={trailKernel}, groups={groups}, trailCount={trailCount}");
             updateShader.Dispatch(trailKernel, groups, 1, 1);
+        }
+        else if (trailCount > 0)
+        {
+            Debug.LogWarning($"[NeuralNexus] Trail compute NOT dispatched: kernel={trailKernel}, trailCount={trailCount}, positionSizeBuffer={trailPositionSizeBuffer != null}, colorBuffer={trailColorBuffer != null}");
         }
 
         if (backgroundVisible && backgroundKernel >= 0 && backgroundCount > 0 && backgroundPositionSizeBuffer != null && backgroundColorBuffer != null)
@@ -538,7 +552,12 @@ public class NeuralNexusController : MonoBehaviour
             updateShader.SetBuffer(backgroundKernel, BackgroundPositionSizeId, backgroundPositionSizeBuffer);
             updateShader.SetBuffer(backgroundKernel, BackgroundColorId, backgroundColorBuffer);
             int groups = Mathf.CeilToInt(backgroundCount / (float)ThreadGroupSize);
+            Debug.Log($"[NeuralNexus] Dispatching background compute: kernel={backgroundKernel}, groups={groups}, backgroundCount={backgroundCount}");
             updateShader.Dispatch(backgroundKernel, groups, 1, 1);
+        }
+        else if (backgroundVisible && backgroundCount > 0)
+        {
+            Debug.LogWarning($"[NeuralNexus] Background compute NOT dispatched: kernel={backgroundKernel}, backgroundCount={backgroundCount}, positionSizeBuffer={backgroundPositionSizeBuffer != null}, colorBuffer={backgroundColorBuffer != null}");
         }
     }
 
