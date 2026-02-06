@@ -558,7 +558,16 @@ public class NeuralNexusController : MonoBehaviour
             nodeMaterial.SetBuffer(NodePositionSizeId, nodePositionSizeBuffer);
             nodeMaterial.SetBuffer(NodeColorId, nodeColorBuffer);
 
-            Graphics.DrawProcedural(nodeMaterial, bounds, MeshTopology.Points, nodeCount, 1, camera, nodePropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
+            var nodeRenderParams = new RenderParams(nodeMaterial)
+            {
+                worldBounds = bounds,
+                matProps = nodePropertyBlock,
+                shadowCastingMode = ShadowCastingMode.Off,
+                receiveShadows = false,
+                layer = gameObject.layer,
+                camera = camera
+            };
+            Graphics.RenderPrimitives(nodeRenderParams, MeshTopology.Points, nodeCount, 1);
         }
 
         if (trailsVisible && trailMaterial && trailPositionSizeBuffer != null && trailColorBuffer != null && trailCount > 0)
@@ -571,7 +580,16 @@ public class NeuralNexusController : MonoBehaviour
             trailMaterial.SetBuffer(TrailPositionSizeId, trailPositionSizeBuffer);
             trailMaterial.SetBuffer(TrailColorId, trailColorBuffer);
 
-            Graphics.DrawProcedural(trailMaterial, bounds, MeshTopology.Points, trailCount, 1, camera, trailPropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
+            var trailRenderParams = new RenderParams(trailMaterial)
+            {
+                worldBounds = bounds,
+                matProps = trailPropertyBlock,
+                shadowCastingMode = ShadowCastingMode.Off,
+                receiveShadows = false,
+                layer = gameObject.layer,
+                camera = camera
+            };
+            Graphics.RenderPrimitives(trailRenderParams, MeshTopology.Points, trailCount, 1);
         }
 
         if (backgroundVisible && backgroundMaterial && backgroundPositionSizeBuffer != null && backgroundColorBuffer != null && backgroundCount > 0)
@@ -583,7 +601,16 @@ public class NeuralNexusController : MonoBehaviour
             backgroundMaterial.SetBuffer(BackgroundPositionSizeId, backgroundPositionSizeBuffer);
             backgroundMaterial.SetBuffer(BackgroundColorId, backgroundColorBuffer);
 
-            Graphics.DrawProcedural(backgroundMaterial, bounds, MeshTopology.Points, backgroundCount, 1, camera, backgroundPropertyBlock, ShadowCastingMode.Off, false, gameObject.layer);
+            var backgroundRenderParams = new RenderParams(backgroundMaterial)
+            {
+                worldBounds = bounds,
+                matProps = backgroundPropertyBlock,
+                shadowCastingMode = ShadowCastingMode.Off,
+                receiveShadows = false,
+                layer = gameObject.layer,
+                camera = camera
+            };
+            Graphics.RenderPrimitives(backgroundRenderParams, MeshTopology.Points, backgroundCount, 1);
         }
     }
 
