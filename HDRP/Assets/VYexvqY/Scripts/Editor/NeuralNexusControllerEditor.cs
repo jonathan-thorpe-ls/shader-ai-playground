@@ -125,13 +125,14 @@ public class NeuralNexusControllerEditor : Editor
 
     private Button CreateToggleButton(string label, string propertyName, System.Action onClick)
     {
-        Button button = new Button(() =>
+        Button button = new Button();
+        button.text = label;
+        button.clicked += () =>
         {
             onClick?.Invoke();
             serializedObject.Update();
             UpdateToggleButtonStyle(button, propertyName);
-        })
-        { text = label };
+        };
 
         button.style.height = 28;
         button.style.flexGrow = 1;
