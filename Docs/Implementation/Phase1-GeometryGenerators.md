@@ -81,7 +81,7 @@ A small CPU reference icosphere builder (recursive midpoint subdivision with a m
 
 ## 3. Milestone 0 — Platform spikes
 
-Each spike is a throwaway scene/test that de-risks an API assumption on Unity 6.6. Results are recorded in this document before Milestone 1 locks the design.
+Each spike is a small, self-contained scene plus code that de-risks an API assumption on Unity 6.6. Spikes are **kept, not thrown away**: they are the reference implementation for each API pattern, a record of what worked (and what didn't), and a quick regression check when Unity or URP is upgraded. Results are recorded in this document before Milestone 1 locks the design.
 
 | # | Spike | Question answered |
 | --- | --- | --- |
@@ -93,6 +93,60 @@ Each spike is a throwaway scene/test that de-risks an API assumption on Unity 6.
 | S5 | Shader Graph Custom Function reading `StructuredBuffer` by Vertex ID | Metadata available to artist-authored materials on the mesh-bridge path |
 | S6 | CLI test run on dev machine and CI agent with a real graphics device (no `-nographics`) | `SystemInfo.supportsComputeShaders` true, compute dispatch + readback work headless. *Dev machine partially confirmed via Pipeline `script eval`: Unity 6000.6.9f1, Direct3D12, NVIDIA RTX 3060 Laptop, compute supported, URP asset `PC_RPAsset` active* |
 | S7 | Motion vectors for GPU-deformed meshes | How to supply previous positions (custom `MotionVectors` pass) — needed later for TAA/STP and XR spacewarp; Phase 1 only documents the approach |
+
+### 3.1 Spike artefacts and layout
+
+Spikes live in the Unity project, outside the framework package, so they never ship with it but stay versioned and runnable:
+
+```
+ReactiveGeometry/Assets/Spikes/
+  Sonosthesia.Spikes.asmdef            # references URP + test framework; never referenced by the package
+  Sonosthesia.Spikes.Tests.asmdef      # EditMode/PlayMode checks for spikes, category "Spike"
+  S1_MeshRawBuffers/
+    S1_MeshRawBuffers.unity            # scene demonstrating the pattern, opens and runs as-is
+    *.cs, *.compute, *.shader, *.hlsl, *.shadergraph
+    NOTES.md                           # see template below
+    Captures/                          # scene/game view PNGs, Frame Debugger / RenderDoc notes, profiler screenshots
+  S2_RenderPrimitives/
+  ...
+```
+
+Rules:
+
+- One folder per spike, named `S<n>_<ShortName>`, containing everything needed to reproduce it (scene, scripts, shaders, materials, settings assets).
+- Scenes must open and run without manual setup; any required project setting is noted in `NOTES.md`.
+- Each spike has at least one automated check in `Sonosthesia.Spikes.Tests` (category `Spike`) asserting its key claim, e.g. "compute-written mesh vertex buffer reads back expected positions" or "`Structured | Raw` buffer creation succeeds". Run with `unity test ReactiveGeometry --filter Spike`.
+- Visual evidence is captured via the Pipeline (`unity command capture scene_view` / `capture game_view` with `output-path` into `Captures/`) so results are reproducible by agents.
+- Spikes are frozen once the outcome is recorded; framework code may copy patterns from them but never references them. If a later Unity/URP upgrade breaks a spike, its test fails and the corresponding framework area is re-checked.
+- Failed or abandoned approaches are kept with their notes (marked `Outcome: rejected`) to avoid re-investigating them.
+
+`NOTES.md` template (one per spike):
+
+```
+# S<n> — <title>
+Question:     <what this spike answers>
+Environment:  Unity <version>, URP <version>, <graphics API>, <GPU>, XR <plug-in/mode if relevant>
+Approach:     <APIs used, key code paths/files>
+Outcome:      confirmed | confirmed with caveats | rejected
+Findings:     <behaviour observed, limitations, gotchas, perf numbers>
+Evidence:     <capture files, test names>
+Design impact: <section(s) of this plan changed, and how>
+```
+
+### 3.2 Spike results
+
+Summary kept in this document; details live in each spike's `NOTES.md`.
+
+| # | Outcome | Date | Design impact | Folder |
+| --- | --- | --- | --- | --- |
+| S0 | pending | | | `Assets/Spikes/S0_Baseline/` |
+| S1 | pending | | | `Assets/Spikes/S1_MeshRawBuffers/` |
+| S2 | pending | | | `Assets/Spikes/S2_RenderPrimitives/` |
+| S3 | pending | | | `Assets/Spikes/S3_XRSinglePass/` |
+| S4 | pending | | | `Assets/Spikes/S4_StructuredRawBuffers/` |
+| S5 | pending | | | `Assets/Spikes/S5_ShaderGraphBuffers/` |
+| S6 | partial — dev machine capabilities confirmed | 2026-11-16 | none yet | `Assets/Spikes/S6_HeadlessCompute/` |
+| S7 | pending | | | `Assets/Spikes/S7_MotionVectors/` |
 
 ---
 
@@ -527,7 +581,7 @@ Notes: do not combine `-quit` with `-runTests`; parse the NUnit XML for results;
 
 Each milestone is complete only when its tests pass via the CLI pipeline.
 
-**M0 — Spikes (§3).** `ReactiveGeometry` baseline confirmed; Unity CLI + Pipeline + Test Framework already in place (§12.1); remaining test packages added; spike results recorded here; CI agent runs a trivial compute test headless.
+**M0 — Spikes (§3).** `ReactiveGeometry` baseline confirmed; Unity CLI + Pipeline + Test Framework already in place (§12.1); remaining test packages added; each spike committed under `Assets/Spikes/` with scene, `NOTES.md`, captures and a passing `Spike` test; results summarised in §3.2; CI agent runs a trivial compute test headless.
 
 **M1 — Foundations.** Package skeleton, assemblies, `GpuBufferRegistry`, `GeometryResource`, `GeometryHeader`, attribute registry/descriptors, scan + reduce kernels with tests, CLI test script.
 *Accept:* scan/reduce match CPU for sizes 1…2²⁰; registry reports zero leaks.
