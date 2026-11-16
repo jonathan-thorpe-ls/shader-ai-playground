@@ -1,0 +1,88 @@
+# =============== #
+# Unity generated #
+# =============== #
+[Tt]emp/
+[Oo]bj/
+[Bb]uild*
+[Ll]ibrary/**
+[Uu]ser[Ss]ettings/**
+UIElementsSchema/**
+Packages/com.unity.pixyz*
+sysinfo.txt
+Logs/
+Assets/Pixyz*
+ 
+# ===================================== #
+# Visual Studio / MonoDevelop generated #
+# ===================================== #
+[Ee]xported[Oo]bj/
+*.userprefs
+*.csproj
+*.pidb
+*.suo
+*.aps
+*.sln*
+*.user
+*.unityproj
+*.booproj
+*.idea
+.vsconfig
+
+# =========== #
+# Editor DLLs #
+# =========== #
+
+ 
+# ============ #
+# OS generated #
+# ============ #
+.DS_Store*
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+[Tt]humbs.db
+orocos.log
+
+
+# ================ #
+# Project Specific #
+# ================ #
+
+# Ignore the data folder
+Assets/Simulations/**
+Assets/Simulations.meta
+Assets/INTERACT_DATA/**
+Assets/XR/**
+Assets/Tests.meta
+
+
+# =================== #
+# Pointcloud database #
+# =================== #
+
+/*.db
+octopcl.log
+
+
+# ===================================== #
+# Visual Studio / MonoDevelop generated #
+# ===================================== #
+[Ee]xported[Oo]bj/
+/*.userprefs
+/*.csproj
+/*.pidb
+/*.suo
+/*.sln*
+/*.user
+/*.unityproj
+/*.booproj
+/.vs/
+/.vscode/
+
+# ================ #
+# Python generated #
+# ================ #
+UserSettings/Layouts/default-6000.dwlt
+UserSettings/EditorUserSettings.asset
+Assets/XR/Settings/OpenXR Package Settings.asset
