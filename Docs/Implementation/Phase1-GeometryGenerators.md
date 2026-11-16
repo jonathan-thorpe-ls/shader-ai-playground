@@ -5,9 +5,10 @@ Implementation plan for the first phase of the GPU audio-reactive procedural geo
 | Item | Decision |
 | --- | --- |
 | Engine | Unity 6.6 |
-| Pipeline | URP (render graph). HDRP project is out of scope for Phase 1, but core code stays pipeline-agnostic |
-| Target project | `URP/` |
-| Testing | Unity Test Framework run via Unity CLI (batch mode) locally and in CI |
+| Pipeline | URP 17.6 (render graph) — the only supported pipeline |
+| Target project | `ReactiveGeometry/` |
+| Testing | Unity Test Framework run via the Unity CLI (`unity test`) locally and in CI |
+| Agentic tooling | Unity CLI (`unity`) + Pipeline package (`com.unity.pipeline`) for live Editor control — see §12.1 |
 | Primary tech | Compute shaders, `GraphicsBuffer`, GPU-writable `Mesh` buffers, `Graphics.RenderPrimitives*` |
 
 ---
@@ -40,10 +41,10 @@ Mass-spring / XPBD simulation, wave propagation, audio analysis, VR interaction,
 
 ## 2. Repository and package layout
 
-The framework lives in an embedded local package shared by both projects, so the HDRP project can adopt it later without duplication.
+The framework lives in an embedded package inside the Unity project, keeping it reusable and its tests isolated from sample content.
 
 ```
-Packages/
+ReactiveGeometry/Packages/
   com.sonosthesia.procgeo/
     package.json
     Runtime/
@@ -70,11 +71,11 @@ Packages/
     Samples~/           demo scenes
 ```
 
-`URP/Packages/manifest.json` references it with `"com.sonosthesia.procgeo": "file:../../Packages/com.sonosthesia.procgeo"` and adds `"testables"` so its tests run from the URP project.
+Embedded packages are picked up automatically. Already installed: `com.unity.pipeline` 1.0.0 and `com.unity.test-framework` 1.8.0. Still to add: `com.unity.shadergraph` if not pulled in by URP, the Graphics Test Framework and Performance Testing packages, and `com.sonosthesia.procgeo` under `"testables"`.
 
-Assemblies: `Sonosthesia.ProcGeo.Runtime` (no URP dependency), `.Runtime.URP`, `.Debug`, `.Editor`, `.Tests.EditMode`, `.Tests.PlayMode`.
+Assemblies: `Sonosthesia.ProcGeo.Runtime` (generation, topology, attributes — no rendering dependency, so it can be tested in isolation), `.Runtime.URP`, `.Debug`, `.Editor`, `.Tests.EditMode`, `.Tests.PlayMode`.
 
-Existing prototype code in `URP/Assets/MYaKqeg` (`IcoSphereBuilder`, `MorphingWireframeController`) is left untouched; `IcoSphereBuilder` is used as a CPU reference in tests.
+A small CPU reference icosphere builder (recursive midpoint subdivision with a midpoint cache) lives in the EditMode test assembly to cross-check the GPU generator.
 
 ---
 
@@ -84,13 +85,13 @@ Each spike is a throwaway scene/test that de-risks an API assumption on Unity 6.
 
 | # | Spike | Question answered |
 | --- | --- | --- |
-| S0 | Upgrade `URP/` to Unity 6.6 and its bundled URP version | Project builds; render graph only; no compatibility-mode dependencies |
+| S0 | Baseline `ReactiveGeometry/` (Unity 6.6, URP 17.6): confirm URP asset/renderer settings, enabled graphics APIs (D3D12/Vulkan), XR plug-in setup | Project builds from CLI; render graph only; settings documented |
 | S1 | Compute writes into `Mesh` vertex/index buffers (`mesh.vertexBufferTarget \|= GraphicsBuffer.Target.Raw`, `indexBufferTarget` likewise) rendered by `MeshRenderer` + URP Lit | Shadows, depth prepass, SSAO, SRP Batcher, GPU Resident Drawer interaction (expect: exclude GRD) |
 | S2 | `Graphics.RenderPrimitivesIndexed` / `RenderPrimitivesIndexedIndirect` with a custom URP shader | Works in Scene + Game view, render graph, correct pass tags |
 | S3 | XR single-pass instanced (Mock HMD / OpenXR) for S1 and S2 | Procedural draws need stereo instancing macros + instance-count handling |
 | S4 | `GraphicsBuffer` created with `Target.Structured \| Target.Raw` | Enables generic `ByteAddressBuffer` debug reads of any attribute; fallback is a debug copy kernel |
 | S5 | Shader Graph Custom Function reading `StructuredBuffer` by Vertex ID | Metadata available to artist-authored materials on the mesh-bridge path |
-| S6 | CLI test run on dev machine and CI agent: `-batchmode -runTests` with a real graphics device (no `-nographics`) | `SystemInfo.supportsComputeShaders` true, compute dispatch + readback work headless |
+| S6 | CLI test run on dev machine and CI agent with a real graphics device (no `-nographics`) | `SystemInfo.supportsComputeShaders` true, compute dispatch + readback work headless. *Dev machine partially confirmed via Pipeline `script eval`: Unity 6000.6.9f1, Direct3D12, NVIDIA RTX 3060 Laptop, compute supported, URP asset `PC_RPAsset` active* |
 | S7 | Motion vectors for GPU-deformed meshes | How to supply previous positions (custom `MotionVectors` pass) — needed later for TAA/STP and XR spacewarp; Phase 1 only documents the approach |
 
 ---
@@ -431,33 +432,76 @@ What later phases need, and where Phase 1 provides it:
 
 ---
 
-## 12. Testing via Unity CLI
+## 12. Testing and agentic development workflow
 
-### 12.1 Test suites
+### 12.1 Available tooling
+
+Development is expected to be largely agent-driven. The following are installed and verified on the dev machine:
+
+| Tool | Location / version | Purpose |
+| --- | --- | --- |
+| Unity Editor | 6000.6.9f1 (Unity Hub install) | Matches `ReactiveGeometry/ProjectSettings/ProjectVersion.txt` |
+| Unity CLI | `unity` 1.0.0, `%LOCALAPPDATA%\Unity\bin\unity.exe` | Open/close projects, run tests, build, manage packages, drive a running Editor |
+| Pipeline package | `com.unity.pipeline` 1.0.0 in `ReactiveGeometry` | Live Editor control over a local connection (port 7800 by default) |
+| Test framework | `com.unity.test-framework` 1.8.0 | EditMode / PlayMode tests |
+
+Key commands (always pass `--project-path ReactiveGeometry`; discover others with `unity command --query <term>`):
+
+| Task | Command |
+| --- | --- |
+| Open Editor / wait until connected | `unity open ReactiveGeometry --until-ready`, `unity status --until-ready` |
+| Recompile and report C# errors | `unity recompile`, or `unity command script recompile` + `script recompile_status` |
+| Read console (compile/shader errors, logs) | `unity command console get`, `console status`, `console clear` |
+| Run C# in the Editor (GPU capability probes, quick dispatch experiments, readback checks) | `unity command script eval --code '...'` or `--file <path.cs>` |
+| Run tests in the live Editor | `unity command test run` (async; `test list`, `test cancel`) |
+| Run tests and write a report | `unity test ReactiveGeometry --mode EditMode -o Build/TestResults/editmode.xml` |
+| Re-run affected / failed tests | `unity test --affected`, `unity test --rerun-failed`, `unity watch test` |
+| Visual checks | `unity command capture game_view` / `capture scene_view` / `capture editor_window` (PNG; not in batch mode) |
+| Play mode | `unity command editor.playmode start` / `stop` |
+| Packages | `unity command package add --name <id> --confirm true --wait true`, `package list` |
+| Profiling / memory | `unity command diagnostics memory_snapshot` (+ `memory_snapshot_status`) |
+
+Practical notes for agents:
+
+- Terminals opened before the CLI was installed need PATH reloaded from the registry before `unity` resolves.
+- PowerShell 5.1 mangles embedded double quotes in native arguments: keep `script eval` code free of `"` or use `--file`. Append `2>&1 | Out-String` to reliably capture output.
+- After package or script changes, the Editor recompiles and `unity status` reports `starting` / blocked by a "Compiling Scripts" dialog; wait with `unity status --until-ready` before issuing commands. If the Editor enters Safe Mode (compile errors), the Pipeline is unavailable: read errors from `unity status`, fix, then retry.
+- An unfocused Editor may defer imports/play-mode updates; `script recompile` works while unfocused. Confirm visual results with captures rather than assuming state.
+
+**Agentic inner loop per change:** edit code/shaders → `unity recompile` → `console get` (errors / shader warnings) → `unity test --affected` (or `command test run` with a filter) → for rendering work, open the sample scene, `capture scene_view`/`game_view` and inspect the image → iterate. Milestone completion still requires the full CLI suite (§12.4).
+
+### 12.2 Test suites
 
 | Suite | Type | Content |
 | --- | --- | --- |
 | `Generators.*` | EditMode, GPU | Each generator × parameter matrix (e.g. icosphere n ∈ {1,2,3,4,8,16,64}; grids with/without wrap/diagonals; tubes open/closed/caps): counts, invariants, validator clean |
 | `Topology.*` | EditMode, GPU | Builder on hand-made fixtures (single triangle, quad, tetrahedron, non-manifold bowtie, disconnected parts, lines); determinism (two runs ⇒ identical bytes) |
 | `Attributes.*` | EditMode, GPU | Graph distance vs. CPU Dijkstra; normalise range; remap; curvature sign on sphere; analytic vs. generic normals within tolerance |
-| `Reference.*` | EditMode | Icosphere with `n = 2^s` vs. `IcoSphereBuilder`: same V/E/F and degree histogram; positions match as point sets (in recursive-equivalent projection mode) |
+| `Reference.*` | EditMode | Icosphere with `n = 2^s` vs. CPU reference builder: same V/E/F and degree histogram; positions match as point sets (in recursive-equivalent projection mode) |
 | `Lifecycle.*` | EditMode | Regenerate / resize / dispose loops; `GpuBufferRegistry` empty afterwards |
 | `Rendering.*` | PlayMode, Graphics Test Framework (`com.unity.testframework.graphics`) | Reference images per generator × debug view (attribute colouring, wireframe, glyphs) and mesh-bridge Lit rendering; per graphics API references |
 | `Performance.*` | PlayMode, Performance Testing package (`com.unity.test-framework.performance`) | GPU time of generation, topology build, normals, mesh export at several sizes; memory per vertex |
 
 GPU tests read back with `GraphicsBuffer.GetData` / `AsyncGPUReadback.WaitAllRequests()` — allowed in tests only. Tests that need compute call `Assume.That(SystemInfo.supportsComputeShaders)` so misconfigured agents report *inconclusive* rather than false passes.
 
-### 12.2 Commands
+### 12.3 Commands
 
-`Tools/ci/run-tests.ps1` wraps the editor CLI (editor path from `UNITY_EDITOR_PATH` or Unity Hub install for 6.6):
+Preferred: the Unity CLI resolves the correct Editor automatically.
+
+```powershell
+unity test ReactiveGeometry --mode EditMode -o Build/TestResults/editmode.xml --report-format nunit,junit
+unity test ReactiveGeometry --mode PlayMode --filter Rendering -o Build/TestResults/playmode.xml
+```
+
+Fallback (no CLI, e.g. minimal CI images): `Tools/ci/run-tests.ps1` wraps the raw editor executable (path from `UNITY_EDITOR_PATH`):
 
 ```powershell
 # EditMode (GPU required: do NOT pass -nographics)
-& $env:UNITY_EDITOR_PATH -batchmode -projectPath URP -runTests -testPlatform EditMode `
+& $env:UNITY_EDITOR_PATH -batchmode -projectPath ReactiveGeometry -runTests -testPlatform EditMode `
     -testResults Build/TestResults/editmode.xml -logFile Build/Logs/editmode.log
 
 # PlayMode graphics + performance
-& $env:UNITY_EDITOR_PATH -batchmode -projectPath URP -runTests -testPlatform PlayMode `
+& $env:UNITY_EDITOR_PATH -batchmode -projectPath ReactiveGeometry -runTests -testPlatform PlayMode `
     -testCategory "Rendering;Performance" `
     -testResults Build/TestResults/playmode.xml -logFile Build/Logs/playmode.log
 
@@ -467,7 +511,9 @@ GPU tests read back with `GraphicsBuffer.GetData` / `AsyncGPUReadback.WaitAllReq
 
 Notes: do not combine `-quit` with `-runTests`; parse the NUnit XML for results; graphics test reference images are stored per platform/API and updated via the Graphics Test Framework's result-collection workflow.
 
-### 12.3 Pipeline
+### 12.4 CI pipeline
+
+`unity ci init` can scaffold the CI configuration; `unity test --shard n/m` splits long suites across agents and `--retries` flags flaky GPU tests.
 
 1. Compile check (open project in batch mode, fail on compile errors / shader compile errors in log).
 2. EditMode GPU suites (every change).
@@ -481,7 +527,7 @@ Notes: do not combine `-quit` with `-runTests`; parse the NUnit XML for results;
 
 Each milestone is complete only when its tests pass via the CLI pipeline.
 
-**M0 — Spikes (§3).** Unity 6.6 upgrade done; spike results recorded here; CI agent runs a trivial compute test headless.
+**M0 — Spikes (§3).** `ReactiveGeometry` baseline confirmed; Unity CLI + Pipeline + Test Framework already in place (§12.1); remaining test packages added; spike results recorded here; CI agent runs a trivial compute test headless.
 
 **M1 — Foundations.** Package skeleton, assemblies, `GpuBufferRegistry`, `GeometryResource`, `GeometryHeader`, attribute registry/descriptors, scan + reduce kernels with tests, CLI test script.
 *Accept:* scan/reduce match CPU for sizes 1…2²⁰; registry reports zero leaks.
