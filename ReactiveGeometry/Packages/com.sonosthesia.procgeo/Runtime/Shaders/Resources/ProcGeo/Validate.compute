@@ -1,0 +1,142 @@
+#pragma kernel ClearValidation
+#pragma kernel ValidateVertices
+#pragma kernel ValidateEdges
+#pragma kernel ValidatePrimitives
+#pragma kernel FinalizeValidation
+
+struct ValidationResult
+{
+    uint errorCount;
+    uint firstElement;
+};
+
+struct GeometryHeader
+{
+    uint vertexCount;
+    uint primitiveCount;
+    uint edgeCount;
+    uint regionCount;
+    float3 boundsMin;
+    uint flags;
+    float3 boundsMax;
+    uint maxDegree;
+};
+
+StructuredBuffer<uint> _Indices;
+StructuredBuffer<float3> _RestPositions;
+StructuredBuffer<float3> _RestNormals;
+StructuredBuffer<uint> _NeighbourOffsets;
+StructuredBuffer<uint> _Neighbours;
+StructuredBuffer<uint2> _Edges;
+StructuredBuffer<float> _RestLengths;
+StructuredBuffer<uint> _EdgeFaceCounts;
+RWStructuredBuffer<ValidationResult> _ValidationResult;
+RWStructuredBuffer<GeometryHeader> _GeometryHeader;
+
+uint _VertexCount;
+uint _PrimitiveCount;
+uint _EdgeCount;
+float _Epsilon;
+
+void Fail(uint element)
+{
+    InterlockedAdd(_ValidationResult[0].errorCount, 1);
+    InterlockedMin(_ValidationResult[0].firstElement, element);
+}
+
+bool Invalid(float3 value)
+{
+    return any(isnan(value)) || any(isinf(value));
+}
+
+[numthreads(1, 1, 1)]
+void ClearValidation(uint3 id : SV_DispatchThreadID)
+{
+    _ValidationResult[0].errorCount = 0;
+    _ValidationResult[0].firstElement = 0xffffffff;
+}
+
+[numthreads(64, 1, 1)]
+void ValidateVertices(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+    if (Invalid(_RestPositions[vertex]) ||
+        Invalid(_RestNormals[vertex]) ||
+        abs(length(_RestNormals[vertex]) - 1.0) > 1e-3)
+        Fail(vertex);
+
+    for (uint slot = _NeighbourOffsets[vertex];
+         slot < _NeighbourOffsets[vertex + 1];
+         slot++)
+    {
+        uint neighbour = _Neighbours[slot];
+        if (neighbour >= _VertexCount || neighbour == vertex)
+        {
+            Fail(vertex);
+            continue;
+        }
+
+        bool symmetric = false;
+        for (uint reverse = _NeighbourOffsets[neighbour];
+             reverse < _NeighbourOffsets[neighbour + 1];
+             reverse++)
+        {
+            if (_Neighbours[reverse] == vertex)
+            {
+                symmetric = true;
+                break;
+            }
+        }
+        if (!symmetric)
+            Fail(vertex);
+    }
+}
+
+[numthreads(64, 1, 1)]
+void ValidateEdges(uint3 id : SV_DispatchThreadID)
+{
+    uint edge = id.x;
+    if (edge >= _EdgeCount)
+        return;
+    uint2 endpoints = _Edges[edge];
+    if (endpoints.x >= endpoints.y ||
+        endpoints.y >= _VertexCount ||
+        isnan(_RestLengths[edge]) ||
+        isinf(_RestLengths[edge]) ||
+        _RestLengths[edge] <= _Epsilon ||
+        _EdgeFaceCounts[edge] == 0 ||
+        _EdgeFaceCounts[edge] > 2)
+        Fail(_VertexCount + edge);
+}
+
+[numthreads(64, 1, 1)]
+void ValidatePrimitives(uint3 id : SV_DispatchThreadID)
+{
+    uint primitive = id.x;
+    if (primitive >= _PrimitiveCount)
+        return;
+    uint a = _Indices[primitive * 3];
+    uint b = _Indices[primitive * 3 + 1];
+    uint c = _Indices[primitive * 3 + 2];
+    if (a >= _VertexCount || b >= _VertexCount || c >= _VertexCount ||
+        a == b || b == c || c == a)
+    {
+        Fail(_VertexCount + _EdgeCount + primitive);
+        return;
+    }
+    float3 normal = cross(
+        _RestPositions[b] - _RestPositions[a],
+        _RestPositions[c] - _RestPositions[a]);
+    if (Invalid(normal) || length(normal) <= _Epsilon)
+        Fail(_VertexCount + _EdgeCount + primitive);
+}
+
+[numthreads(1, 1, 1)]
+void FinalizeValidation(uint3 id : SV_DispatchThreadID)
+{
+    GeometryHeader header = _GeometryHeader[0];
+    header.flags = _ValidationResult[0].errorCount == 0 ? 3 : 16;
+    _GeometryHeader[0] = header;
+}

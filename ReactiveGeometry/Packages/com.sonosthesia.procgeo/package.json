@@ -1,0 +1,11 @@
+{
+  "name": "com.sonosthesia.procgeo",
+  "displayName": "Sonosthesia Procedural Geometry",
+  "version": "0.1.0",
+  "unity": "6000.6",
+  "description": "GPU geometry generation, topology and URP mesh rendering.",
+  "dependencies": {
+    "com.unity.render-pipelines.universal": "17.6.0",
+    "com.unity.test-framework": "1.8.0"
+  }
+}

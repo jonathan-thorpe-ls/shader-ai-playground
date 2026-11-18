@@ -1,0 +1,57 @@
+#pragma kernel ComputeNormalsAndCurvature
+
+StructuredBuffer<uint> _Indices;
+StructuredBuffer<float3> _RestPositions;
+StructuredBuffer<float3> _RestNormals;
+StructuredBuffer<uint> _NeighbourOffsets;
+StructuredBuffer<uint> _Neighbours;
+StructuredBuffer<uint> _VertexFaceOffsets;
+StructuredBuffer<uint> _VertexFaces;
+RWStructuredBuffer<float> _Curvature;
+RWByteAddressBuffer _DynamicVertices;
+
+uint _VertexCount;
+float _Epsilon;
+static const uint DYNAMIC_VERTEX_STRIDE = 24;
+
+[numthreads(64, 1, 1)]
+void ComputeNormalsAndCurvature(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+
+    float3 weightedNormal = 0;
+    for (uint slot = _VertexFaceOffsets[vertex];
+         slot < _VertexFaceOffsets[vertex + 1];
+         slot++)
+    {
+        uint primitive = _VertexFaces[slot];
+        uint a = _Indices[primitive * 3];
+        uint b = _Indices[primitive * 3 + 1];
+        uint c = _Indices[primitive * 3 + 2];
+        weightedNormal += cross(
+            _RestPositions[b] - _RestPositions[a],
+            _RestPositions[c] - _RestPositions[a]);
+    }
+
+    float lengthSquared = dot(weightedNormal, weightedNormal);
+    float3 normal = lengthSquared > _Epsilon * _Epsilon
+        ? weightedNormal * rsqrt(lengthSquared)
+        : _RestNormals[vertex];
+
+    float3 neighbourMean = 0;
+    uint degree = _NeighbourOffsets[vertex + 1] - _NeighbourOffsets[vertex];
+    for (uint neighbour = _NeighbourOffsets[vertex];
+         neighbour < _NeighbourOffsets[vertex + 1];
+         neighbour++)
+        neighbourMean += _RestPositions[_Neighbours[neighbour]];
+    if (degree > 0)
+        neighbourMean /= degree;
+
+    float3 laplacian = neighbourMean - _RestPositions[vertex];
+    _Curvature[vertex] = degree > 0 ? dot(laplacian, normal) : 0.0;
+    _DynamicVertices.Store3(
+        vertex * DYNAMIC_VERTEX_STRIDE + 12,
+        asuint(normal));
+}

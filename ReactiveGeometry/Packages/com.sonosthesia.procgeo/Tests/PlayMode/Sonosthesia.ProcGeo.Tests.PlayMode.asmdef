@@ -1,0 +1,22 @@
+{
+  "name": "Sonosthesia.ProcGeo.Tests.PlayMode",
+  "rootNamespace": "Sonosthesia.ProcGeo.Tests",
+  "references": [
+    "Sonosthesia.ProcGeo.Runtime",
+    "Sonosthesia.ProcGeo.Runtime.URP"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

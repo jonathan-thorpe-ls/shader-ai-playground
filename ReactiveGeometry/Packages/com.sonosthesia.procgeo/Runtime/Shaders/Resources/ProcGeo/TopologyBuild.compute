@@ -1,0 +1,394 @@
+#pragma kernel ClearVertices
+#pragma kernel CountPrimitives
+#pragma kernel PrepareProvisionalScatter
+#pragma kernel ScatterNeighboursAndFaces
+#pragma kernel SortDedupeNeighbours
+#pragma kernel CompactNeighbours
+#pragma kernel MarkEdges
+#pragma kernel CompactEdges
+#pragma kernel AssignReverseEdgeIds
+#pragma kernel SortFaces
+#pragma kernel ComputeEdgeData
+#pragma kernel ComputeBoundaryAndDegrees
+#pragma kernel ScanInit
+#pragma kernel ScanStep
+#pragma kernel WriteOffsets
+
+StructuredBuffer<uint> _Indices;
+StructuredBuffer<float3> _RestPositions;
+
+RWStructuredBuffer<uint> _Degrees;
+RWStructuredBuffer<uint> _FaceDegrees;
+RWStructuredBuffer<uint> _UniqueCounts;
+StructuredBuffer<uint> _ProvisionalOffsets;
+StructuredBuffer<uint> _NeighbourOffsets;
+RWStructuredBuffer<uint> _Cursors;
+RWStructuredBuffer<uint> _FaceCursors;
+RWStructuredBuffer<uint> _ProvisionalNeighbours;
+RWStructuredBuffer<uint> _Neighbours;
+StructuredBuffer<uint> _NeighboursRead;
+RWStructuredBuffer<uint> _NeighbourEdge;
+RWStructuredBuffer<uint2> _Edges;
+StructuredBuffer<uint2> _EdgesRead;
+RWStructuredBuffer<float> _RestLengths;
+RWStructuredBuffer<uint> _EdgeTypes;
+StructuredBuffer<uint> _VertexFaceOffsets;
+RWStructuredBuffer<uint> _VertexFaces;
+RWStructuredBuffer<uint> _EdgeFaceCounts;
+StructuredBuffer<uint> _EdgeFaceCountsRead;
+RWStructuredBuffer<uint> _DirectedMarks;
+StructuredBuffer<uint> _DirectedMarksRead;
+RWStructuredBuffer<uint> _DirectedSources;
+StructuredBuffer<uint> _DirectedSourcesRead;
+StructuredBuffer<uint> _EdgePositions;
+RWStructuredBuffer<uint> _Failure;
+RWStructuredBuffer<float> _BoundaryWeights;
+RWStructuredBuffer<uint> _NeighbourCounts;
+RWStructuredBuffer<float> _AttributeEdgeRestLengths;
+
+StructuredBuffer<uint> _ScanInput;
+RWStructuredBuffer<uint> _ScanInclusiveA;
+RWStructuredBuffer<uint> _ScanInclusiveB;
+StructuredBuffer<uint> _ScanRead;
+RWStructuredBuffer<uint> _ScanWrite;
+StructuredBuffer<uint> _ScanFinal;
+RWStructuredBuffer<uint> _OffsetOutput;
+
+uint _VertexCount;
+uint _PrimitiveCount;
+uint _DirectedCapacity;
+uint _EdgeCapacity;
+uint _MaxSortDegree;
+uint _ScanCount;
+uint _ScanStep;
+
+uint ThreadGroups64(uint count)
+{
+    return (count + 63) / 64;
+}
+
+void StoreFailure()
+{
+    InterlockedOr(_Failure[0], 1);
+}
+
+[numthreads(64, 1, 1)]
+void ClearVertices(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _VertexCount)
+    {
+        _Degrees[id.x] = 0;
+        _FaceDegrees[id.x] = 0;
+        _UniqueCounts[id.x] = 0;
+        _BoundaryWeights[id.x] = 0;
+        _NeighbourCounts[id.x] = 0;
+    }
+    if (id.x < 1)
+        _Failure[0] = 0;
+}
+
+uint TriangleIndex(uint primitive, uint corner)
+{
+    return _Indices[primitive * 3 + corner];
+}
+
+[numthreads(64, 1, 1)]
+void CountPrimitives(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _PrimitiveCount)
+        return;
+
+    uint a = TriangleIndex(id.x, 0);
+    uint b = TriangleIndex(id.x, 1);
+    uint c = TriangleIndex(id.x, 2);
+    if (a >= _VertexCount || b >= _VertexCount || c >= _VertexCount)
+    {
+        StoreFailure();
+        return;
+    }
+
+    InterlockedAdd(_Degrees[a], 1);
+    InterlockedAdd(_Degrees[b], 1);
+    InterlockedAdd(_Degrees[b], 1);
+    InterlockedAdd(_Degrees[c], 1);
+    InterlockedAdd(_Degrees[c], 1);
+    InterlockedAdd(_Degrees[a], 1);
+
+    InterlockedAdd(_FaceDegrees[a], 1);
+    InterlockedAdd(_FaceDegrees[b], 1);
+    InterlockedAdd(_FaceDegrees[c], 1);
+}
+
+[numthreads(64, 1, 1)]
+void PrepareProvisionalScatter(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _VertexCount)
+        return;
+    _Cursors[id.x] = _ProvisionalOffsets[id.x];
+    _FaceCursors[id.x] = _VertexFaceOffsets[id.x];
+}
+
+void ScatterNeighbour(uint source, uint target, uint face)
+{
+    uint position;
+    InterlockedAdd(_Cursors[source], 1, position);
+    _ProvisionalNeighbours[position] = target;
+}
+
+[numthreads(64, 1, 1)]
+void ScatterNeighboursAndFaces(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _PrimitiveCount)
+        return;
+
+    uint a = TriangleIndex(id.x, 0);
+    uint b = TriangleIndex(id.x, 1);
+    uint c = TriangleIndex(id.x, 2);
+
+    ScatterNeighbour(a, b, id.x);
+    ScatterNeighbour(b, a, id.x);
+    ScatterNeighbour(b, c, id.x);
+    ScatterNeighbour(c, b, id.x);
+    ScatterNeighbour(c, a, id.x);
+    ScatterNeighbour(a, c, id.x);
+
+    uint position;
+    InterlockedAdd(_FaceCursors[a], 1, position);
+    _VertexFaces[position] = id.x;
+    InterlockedAdd(_FaceCursors[b], 1, position);
+    _VertexFaces[position] = id.x;
+    InterlockedAdd(_FaceCursors[c], 1, position);
+    _VertexFaces[position] = id.x;
+}
+
+[numthreads(64, 1, 1)]
+void SortDedupeNeighbours(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+
+    uint begin = _ProvisionalOffsets[vertex];
+    uint end = _ProvisionalOffsets[vertex + 1];
+    uint count = end - begin;
+    if (count > _MaxSortDegree)
+    {
+        StoreFailure();
+        return;
+    }
+
+    for (uint i = 1; i < count; i++)
+    {
+        uint value = _ProvisionalNeighbours[begin + i];
+        int j = (int)i - 1;
+        while (j >= 0 && _ProvisionalNeighbours[begin + (uint)j] > value)
+        {
+            _ProvisionalNeighbours[begin + (uint)j + 1] =
+                _ProvisionalNeighbours[begin + (uint)j];
+            j--;
+        }
+        _ProvisionalNeighbours[begin + (uint)j + 1] = value;
+    }
+
+    uint unique = 0;
+    if (count > 0)
+    {
+        _ProvisionalNeighbours[begin] = _ProvisionalNeighbours[begin];
+        unique = 1;
+        for (uint i = 1; i < count; i++)
+        {
+            uint value = _ProvisionalNeighbours[begin + i];
+            if (value != _ProvisionalNeighbours[begin + unique - 1])
+                _ProvisionalNeighbours[begin + unique++] = value;
+        }
+    }
+    _UniqueCounts[vertex] = unique;
+}
+
+[numthreads(64, 1, 1)]
+void CompactNeighbours(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+    uint source = _ProvisionalOffsets[vertex];
+    uint destination = _NeighbourOffsets[vertex];
+    uint count = _UniqueCounts[vertex];
+    for (uint i = 0; i < count; i++)
+    {
+        _Neighbours[destination + i] = _ProvisionalNeighbours[source + i];
+        _DirectedSources[destination + i] = vertex;
+    }
+    _NeighbourCounts[vertex] = count;
+}
+
+[numthreads(64, 1, 1)]
+void MarkEdges(uint3 id : SV_DispatchThreadID)
+{
+    uint slot = id.x;
+    uint directedCount = _NeighbourOffsets[_VertexCount];
+    if (slot >= directedCount || slot >= _DirectedCapacity)
+    {
+        _DirectedMarks[slot] = 0;
+        return;
+    }
+
+    uint source = _DirectedSourcesRead[slot];
+    _DirectedMarks[slot] = _NeighboursRead[slot] > source ? 1 : 0;
+}
+
+[numthreads(64, 1, 1)]
+void CompactEdges(uint3 id : SV_DispatchThreadID)
+{
+    uint slot = id.x;
+    uint directedCount = _NeighbourOffsets[_VertexCount];
+    if (slot >= directedCount || slot >= _DirectedCapacity || _DirectedMarksRead[slot] == 0)
+        return;
+
+    uint source = _DirectedSourcesRead[slot];
+    uint edge = _EdgePositions[slot + 1] - 1;
+    if (edge >= _EdgeCapacity)
+    {
+        StoreFailure();
+        return;
+    }
+    _Edges[edge] = uint2(source, _NeighboursRead[slot]);
+    _EdgeTypes[edge] = 0;
+    _EdgeFaceCounts[edge] = 0;
+    _NeighbourEdge[slot] = edge;
+}
+
+[numthreads(64, 1, 1)]
+void AssignReverseEdgeIds(uint3 id : SV_DispatchThreadID)
+{
+    uint slot = id.x;
+    uint directedCount = _NeighbourOffsets[_VertexCount];
+    if (slot >= directedCount || slot >= _DirectedCapacity)
+        return;
+
+    uint source = _DirectedSourcesRead[slot];
+    uint target = _NeighboursRead[slot];
+    if (target > source)
+        return;
+
+    for (uint reverse = _NeighbourOffsets[target];
+         reverse < _NeighbourOffsets[target + 1];
+         reverse++)
+    {
+        if (_NeighboursRead[reverse] == source)
+        {
+            _NeighbourEdge[slot] = _NeighbourEdge[reverse];
+            return;
+        }
+    }
+    StoreFailure();
+}
+
+[numthreads(64, 1, 1)]
+void SortFaces(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+    uint begin = _VertexFaceOffsets[vertex];
+    uint end = _VertexFaceOffsets[vertex + 1];
+    for (uint i = begin + 1; i < end; i++)
+    {
+        uint value = _VertexFaces[i];
+        int j = (int)i - 1;
+        while (j >= (int)begin && _VertexFaces[(uint)j] > value)
+        {
+            _VertexFaces[(uint)j + 1] = _VertexFaces[(uint)j];
+            j--;
+        }
+        _VertexFaces[(uint)j + 1] = value;
+    }
+}
+
+uint FindEdgeId(uint source, uint target)
+{
+    for (uint slot = _NeighbourOffsets[source];
+         slot < _NeighbourOffsets[source + 1];
+         slot++)
+    {
+        if (_NeighboursRead[slot] == target)
+            return _NeighbourEdge[slot];
+    }
+    return 0xffffffff;
+}
+
+[numthreads(64, 1, 1)]
+void ComputeEdgeData(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _EdgeCapacity)
+    {
+        uint2 edge = _EdgesRead[id.x];
+        _RestLengths[id.x] = distance(_RestPositions[edge.x], _RestPositions[edge.y]);
+        _AttributeEdgeRestLengths[id.x] = _RestLengths[id.x];
+    }
+
+    if (id.x >= _PrimitiveCount)
+        return;
+    uint a = TriangleIndex(id.x, 0);
+    uint b = TriangleIndex(id.x, 1);
+    uint c = TriangleIndex(id.x, 2);
+    uint edges[3] =
+    {
+        FindEdgeId(a, b),
+        FindEdgeId(b, c),
+        FindEdgeId(c, a)
+    };
+    [unroll]
+    for (uint i = 0; i < 3; i++)
+    {
+        if (edges[i] == 0xffffffff)
+            StoreFailure();
+        else
+            InterlockedAdd(_EdgeFaceCounts[edges[i]], 1);
+    }
+}
+
+[numthreads(64, 1, 1)]
+void ComputeBoundaryAndDegrees(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _VertexCount)
+        return;
+    uint boundary = 0;
+    for (uint slot = _NeighbourOffsets[id.x];
+         slot < _NeighbourOffsets[id.x + 1];
+         slot++)
+    {
+        uint edge = _NeighbourEdge[slot];
+        if (_EdgeFaceCountsRead[edge] == 1)
+            boundary = 1;
+    }
+    _BoundaryWeights[id.x] = boundary;
+}
+
+[numthreads(64, 1, 1)]
+void ScanInit(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _ScanCount)
+        _ScanInclusiveA[id.x] = _ScanInput[id.x];
+    else
+        _ScanInclusiveA[id.x] = 0;
+}
+
+[numthreads(64, 1, 1)]
+void ScanStep(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ScanCount)
+        return;
+    uint value = _ScanRead[id.x];
+    if (id.x >= _ScanStep)
+        value += _ScanRead[id.x - _ScanStep];
+    _ScanWrite[id.x] = value;
+}
+
+[numthreads(64, 1, 1)]
+void WriteOffsets(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x > _ScanCount)
+        return;
+    _OffsetOutput[id.x] = id.x == 0 ? 0 : _ScanFinal[id.x - 1];
+}

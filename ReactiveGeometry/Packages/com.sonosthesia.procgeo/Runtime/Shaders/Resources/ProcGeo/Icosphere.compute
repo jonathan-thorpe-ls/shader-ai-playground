@@ -1,0 +1,183 @@
+#pragma kernel GenerateVertices
+#pragma kernel GenerateIndicesAndAttributes
+
+struct Locator
+{
+    uint face;
+    uint i;
+    uint j;
+    uint k;
+};
+
+struct GeometryHeader
+{
+    uint vertexCount;
+    uint primitiveCount;
+    uint edgeCount;
+    uint regionCount;
+    float3 boundsMin;
+    uint flags;
+    float3 boundsMax;
+    uint maxDegree;
+};
+
+RWByteAddressBuffer _DynamicVertices;
+RWByteAddressBuffer _StaticVertices;
+RWByteAddressBuffer _Indices;
+RWByteAddressBuffer _DrawArgs;
+
+StructuredBuffer<float3> _Corners;
+StructuredBuffer<uint3> _Faces;
+StructuredBuffer<Locator> _Locators;
+StructuredBuffer<uint3> _Triangles;
+StructuredBuffer<uint> _TriangleRegions;
+
+RWStructuredBuffer<float3> _RestPositions;
+RWStructuredBuffer<float3> _RestNormals;
+RWStructuredBuffer<float4> _RestTangents;
+RWStructuredBuffer<float2> _CornerCoords;
+RWStructuredBuffer<uint> _RegionIds;
+RWStructuredBuffer<GeometryHeader> _Header;
+
+uint _Frequency;
+uint _VertexCount;
+uint _PrimitiveCount;
+uint _EdgeCount;
+uint _RecursiveProjection;
+float _Radius;
+
+static const uint DYNAMIC_VERTEX_STRIDE = 24;
+static const uint STATIC_VERTEX_STRIDE = 24;
+
+float3 ProjectRecursive(uint3 face, uint locatorI, uint locatorJ, uint locatorK)
+{
+    float3 a = _Corners[face.x];
+    float3 b = _Corners[face.y];
+    float3 c = _Corners[face.z];
+    uint i = locatorI;
+    uint j = locatorJ;
+    uint k = locatorK;
+    uint levelSize = _Frequency;
+
+    while (levelSize > 1)
+    {
+        uint halfSize = levelSize >> 1;
+        float3 ab = normalize(a + b);
+        float3 bc = normalize(b + c);
+        float3 ca = normalize(c + a);
+        if (k >= halfSize)
+        {
+            b = ab;
+            c = ca;
+            k -= halfSize;
+        }
+        else if (i >= halfSize)
+        {
+            a = ab;
+            c = bc;
+            i -= halfSize;
+        }
+        else if (j >= halfSize)
+        {
+            a = ca;
+            b = bc;
+            j -= halfSize;
+        }
+        else
+        {
+            uint nextI = halfSize - k;
+            uint nextJ = halfSize - i;
+            uint nextK = halfSize - j;
+            a = ab;
+            b = bc;
+            c = ca;
+            i = nextI;
+            j = nextJ;
+            k = nextK;
+        }
+        levelSize = halfSize;
+    }
+
+    if (k != 0)
+        return a;
+    return i != 0 ? b : c;
+}
+
+[numthreads(64, 1, 1)]
+void GenerateVertices(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint vertexId = dispatchId.x;
+    if (vertexId >= _VertexCount)
+        return;
+
+    Locator locator = _Locators[vertexId];
+    uint3 face = _Faces[locator.face];
+    float inverseFrequency = 1.0 / (float)_Frequency;
+    float3 position = _RecursiveProjection != 0
+        ? ProjectRecursive(face, locator.i, locator.j, locator.k)
+        : normalize(
+            _Corners[face.x] * (locator.k * inverseFrequency) +
+            _Corners[face.y] * (locator.i * inverseFrequency) +
+            _Corners[face.z] * (locator.j * inverseFrequency));
+    float3 normal = position;
+    position *= _Radius;
+
+    float3 helper = abs(normal.y) < 0.999
+        ? float3(0.0, 1.0, 0.0)
+        : float3(1.0, 0.0, 0.0);
+    float3 tangent = normalize(cross(helper, normal));
+    float4 tangentWithHandedness = float4(tangent, 1.0);
+    float longitude = atan2(normal.z, normal.x) / (2.0 * 3.14159265359) + 0.5;
+    float latitude = asin(normal.y) / 3.14159265359 + 0.5;
+    float2 uv = float2(longitude, latitude);
+
+    _RestPositions[vertexId] = position;
+    _RestNormals[vertexId] = normal;
+    _RestTangents[vertexId] = tangentWithHandedness;
+
+    uint dynamicOffset = vertexId * DYNAMIC_VERTEX_STRIDE;
+    _DynamicVertices.Store3(dynamicOffset, asuint(position));
+    _DynamicVertices.Store3(dynamicOffset + 12, asuint(normal));
+
+    uint staticOffset = vertexId * STATIC_VERTEX_STRIDE;
+    _StaticVertices.Store4(staticOffset, asuint(tangentWithHandedness));
+    _StaticVertices.Store2(staticOffset + 16, asuint(uv));
+}
+
+[numthreads(64, 1, 1)]
+void GenerateIndicesAndAttributes(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint primitiveId = dispatchId.x;
+    if (primitiveId >= _PrimitiveCount)
+        return;
+
+    uint3 indices = _Triangles[primitiveId];
+    uint indexOffset = primitiveId * 12;
+    _Indices.Store3(indexOffset, indices);
+
+    uint cornerOffset = primitiveId * 3;
+    _CornerCoords[cornerOffset] = float2(0.0, 0.0);
+    _CornerCoords[cornerOffset + 1] = float2(1.0, 0.0);
+    _CornerCoords[cornerOffset + 2] = float2(0.0, 1.0);
+    _RegionIds[primitiveId] = _TriangleRegions[primitiveId];
+
+    if (primitiveId == 0)
+    {
+        GeometryHeader header;
+        header.vertexCount = _VertexCount;
+        header.primitiveCount = _PrimitiveCount;
+        header.edgeCount = _EdgeCount;
+        header.regionCount = 20;
+        header.boundsMin = float3(-_Radius, -_Radius, -_Radius);
+        header.flags = 0;
+        header.boundsMax = float3(_Radius, _Radius, _Radius);
+        header.maxDegree = 6;
+        _Header[0] = header;
+
+        _DrawArgs.Store(0, _PrimitiveCount * 3);
+        _DrawArgs.Store(4, 1);
+        _DrawArgs.Store(8, 0);
+        _DrawArgs.Store(12, 0);
+        _DrawArgs.Store(16, 0);
+    }
+}

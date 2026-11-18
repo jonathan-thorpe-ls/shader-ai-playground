@@ -118,7 +118,7 @@ Rules:
 
 - One folder per spike, named `S<n>_<ShortName>`, containing everything needed to reproduce it (scene, scripts, shaders, materials, settings assets).
 - Scenes must open and run without manual setup; any required project setting is noted in `NOTES.md`.
-- Each spike has at least one automated check in `Sonosthesia.Spikes.Tests` (category `Spike`) asserting its key claim, e.g. "compute-written mesh vertex buffer reads back expected positions" or "`Structured | Raw` buffer creation succeeds". Run with `unity test ReactiveGeometry --filter Spike`.
+- Each implemented spike has at least one automated check in `Sonosthesia.ProcGeo.Tests.EditMode` (category `Spike`) asserting its key claim, e.g. "compute-written mesh vertex buffer reads back expected positions" or "`Structured | Raw` buffer creation succeeds". Run with `unity test ReactiveGeometry --filter Spike`.
 - Visual evidence is captured via the Pipeline (`unity command capture scene_view` / `capture game_view` with `output-path` into `Captures/`) so results are reproducible by agents.
 - Spikes are frozen once the outcome is recorded; framework code may copy patterns from them but never references them. If a later Unity/URP upgrade breaks a spike, its test fails and the corresponding framework area is re-checked.
 - Failed or abandoned approaches are kept with their notes (marked `Outcome: rejected`) to avoid re-investigating them.
@@ -142,13 +142,13 @@ Summary kept in this document; details live in each spike's `NOTES.md`.
 
 | # | Outcome | Date | Design impact | Folder |
 | --- | --- | --- | --- | --- |
-| S0 | pending | | | `Assets/Spikes/S0_Baseline/` |
-| S1 | pending | | | `Assets/Spikes/S1_MeshRawBuffers/` |
+| S0 | confirmed | 2026-11-18 | Unity 6.6 / URP 17.6 baseline is usable | `Assets/Spikes/S0_Baseline/` |
+| S1 | confirmed with caveats | 2026-11-18 | Use direct raw mesh-buffer writes; secondary URP feature checks remain | `Assets/Spikes/S1_MeshRawBuffers/` |
 | S2 | pending | | | `Assets/Spikes/S2_RenderPrimitives/` |
 | S3 | pending | | | `Assets/Spikes/S3_XRSinglePass/` |
-| S4 | pending | | | `Assets/Spikes/S4_StructuredRawBuffers/` |
+| S4 | confirmed | 2026-11-18 | No D3D12 debug-copy fallback is required | `Assets/Spikes/S4_StructuredRawBuffers/` |
 | S5 | pending | | | `Assets/Spikes/S5_ShaderGraphBuffers/` |
-| S6 | partial — dev machine capabilities confirmed | 2026-11-16 | none yet | `Assets/Spikes/S6_HeadlessCompute/` |
+| S6 | confirmed with caveats | 2026-11-18 | CLI tests use a real GPU; CI still requires a GPU agent | `Assets/Spikes/S6_HeadlessCompute/` |
 | S7 | pending | | | `Assets/Spikes/S7_MotionVectors/` |
 
 ---
@@ -601,6 +601,8 @@ Notes: do not combine `-quit` with `-runTests`; parse the NUnit XML for results.
 ---
 
 ## 13. Milestones and acceptance criteria
+
+Implementation status as of 2026-11-18: M0–M3 are implemented. Required spikes S0, S1, S4 and S6 have notes and focused tests; the icosphere, topology, validation, resource lifecycle, and URP mesh bridge pass the EditMode and PlayMode suites.
 
 Each milestone is complete only when its tests pass via the CLI pipeline. Phase 1 ends at M3; M4 onward is the ordered post-phase backlog.
 

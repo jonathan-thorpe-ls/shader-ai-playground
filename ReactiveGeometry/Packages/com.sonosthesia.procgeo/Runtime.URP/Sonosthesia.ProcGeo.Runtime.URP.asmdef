@@ -1,0 +1,18 @@
+{
+  "name": "Sonosthesia.ProcGeo.Runtime.URP",
+  "rootNamespace": "Sonosthesia.ProcGeo",
+  "references": [
+    "Sonosthesia.ProcGeo.Runtime",
+    "Unity.RenderPipelines.Core.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

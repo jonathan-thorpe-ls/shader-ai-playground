@@ -1,0 +1,14 @@
+{
+  "name": "Sonosthesia.ProcGeo.Runtime",
+  "rootNamespace": "Sonosthesia.ProcGeo",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
