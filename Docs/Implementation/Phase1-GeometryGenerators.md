@@ -7,6 +7,7 @@ Implementation plan for the first phase of the GPU audio-reactive procedural geo
 | Engine | Unity 6.6 |
 | Pipeline | URP 17.6 (render graph) — the only supported pipeline |
 | Target project | `ReactiveGeometry/` |
+| Phase 1 gate | One complete icosphere vertical slice: GPU generation, topology, metadata, validation and URP rendering |
 | Testing | Unity Test Framework run via the Unity CLI (`unity test`) locally and in CI |
 | Agentic tooling | Unity CLI (`unity`) + Pipeline package (`com.unity.pipeline`) for live Editor control — see §12.1 |
 | Primary tech | Compute shaders, `GraphicsBuffer`, GPU-writable `Mesh` buffers, `Graphics.RenderPrimitives*` |
@@ -17,17 +18,17 @@ Implementation plan for the first phase of the GPU audio-reactive procedural geo
 
 ### 1.1 In scope
 
-1. A **geometry data contract** shared by all generators (geometry, topology, metadata, live state slots).
-2. **Compute-shader generators**: icosphere (geodesic), parametric surfaces (plane, sine, saddle, twist, cylinder, torus), tube along a curve. Branching graph as a stretch milestone to prove non-triangle topology.
-3. A **generic GPU topology builder** producing deterministic CSR neighbour connectivity, an edge list, rest lengths and vertex→face incidence from any triangle or line primitive buffer.
-4. A **metadata (attribute) system**: discoverable, typed, domain-aware attributes stored in GPU buffers, plus reusable GPU *attribute operators* (graph distance, normalise, remap, curvature…) to derive them.
-5. **Rendering in URP** directly from GPU buffers with no per-frame CPU readback, compatible with URP Lit / Shader Graph, shadows, depth/normals prepasses and XR single-pass instanced.
-6. **Visualisation and debug tools** for geometry, topology and metadata.
-7. **Automated validation** (EditMode GPU tests, graphics tests, performance tests) runnable via Unity CLI.
+1. A **geometry data contract** designed for shared use by later generators, implemented first for an icosphere.
+2. A **compute-shader geodesic icosphere generator** with canonical vertex deduplication.
+3. A **generic triangle-topology GPU builder** producing deterministic CSR neighbour connectivity, edges, rest lengths and vertex→face incidence. Line topology is a planned interface capability, not a Phase 1 acceptance requirement.
+4. Core metadata: rest geometry, local coordinates, primitive/corner region identity, degrees, boundary weights and curvature.
+5. URP rendering through the **mesh-bridge path** with no per-frame CPU readback.
+6. Minimal debug visualisation needed to verify the generated icosphere and topology.
+7. Automated EditMode GPU validation and one PlayMode graphics smoke test runnable via Unity CLI.
 
 ### 1.2 Out of scope (designed for, not implemented)
 
-Mass-spring / XPBD simulation, wave propagation, audio analysis, VR interaction, particle networks, Voronoi. Phase 1 must, however, **produce every input those systems need** (§7) and reserve the live-state buffers they will write to.
+Mass-spring / XPBD simulation, wave propagation, audio analysis, VR interaction, particle networks, Voronoi, parametric surfaces, tubes, branching graphs, production editor tooling, and the procedural-draw path. Phase 1 reserves forward-compatible domains and live-state storage without implementing those consumers.
 
 ### 1.3 Guiding principles (from the stubs)
 
@@ -35,13 +36,13 @@ Mass-spring / XPBD simulation, wave propagation, audio analysis, VR interaction,
 - The GPU is the source of truth. CPU readback is allowed only for one-off generation metadata (bounds/counts), editor tooling and tests — never per frame.
 - Geometry is **self-describing**: generators emit structure *and* semantics.
 - Rendering indices ≠ simulation connectivity. Both are produced, separately.
-- Determinism: same settings + seed ⇒ bit-identical buffers.
+- Determinism: same settings + seed produce bit-identical integer and topology buffers on the same tested GPU/API. Floating-point buffers are compared with a documented per-field tolerance. Cross-driver bit identity is not required.
 
 ---
 
 ## 2. Repository and package layout
 
-The framework lives in an embedded package inside the Unity project, keeping it reusable and its tests isolated from sample content.
+The framework lives in an embedded package inside the Unity project, keeping it reusable and its tests isolated from sample content. The complete layout below is the eventual package shape; Phase 1 creates only the directories and files needed by M0–M3.
 
 ```
 ReactiveGeometry/Packages/
@@ -71,7 +72,7 @@ ReactiveGeometry/Packages/
     Samples~/           demo scenes
 ```
 
-Embedded packages are picked up automatically. Already installed: `com.unity.pipeline` 1.0.0 and `com.unity.test-framework` 1.8.0. Still to add: `com.unity.shadergraph` if not pulled in by URP, the Graphics Test Framework and Performance Testing packages, and `com.sonosthesia.procgeo` under `"testables"`.
+Embedded packages are picked up automatically. Already installed: `com.unity.pipeline` 1.0.0, `com.unity.test-framework` 1.8.0, `com.unity.shadergraph` 17.6.0 (via URP), and `com.unity.test-framework.performance` 6.6.0. Still to add for the later visual-test milestone: the Graphics Test Framework. During development, `com.sonosthesia.procgeo` must also be listed under `"testables"`.
 
 Assemblies: `Sonosthesia.ProcGeo.Runtime` (generation, topology, attributes — no rendering dependency, so it can be tested in isolation), `.Runtime.URP`, `.Debug`, `.Editor`, `.Tests.EditMode`, `.Tests.PlayMode`.
 
@@ -82,6 +83,8 @@ A small CPU reference icosphere builder (recursive midpoint subdivision with a m
 ## 3. Milestone 0 — Platform spikes
 
 Each spike is a small, self-contained scene plus code that de-risks an API assumption on Unity 6.6. Spikes are **kept, not thrown away**: they are the reference implementation for each API pattern, a record of what worked (and what didn't), and a quick regression check when Unity or URP is upgraded. Results are recorded in this document before Milestone 1 locks the design.
+
+S0, S1, S4 and S6 are required before M1. S2, S3, S5 and S7 are retained as post-Phase-1 spikes and do not gate implementation of the mesh-bridge icosphere.
 
 | # | Spike | Question answered |
 | --- | --- | --- |
@@ -165,15 +168,20 @@ public sealed class GeometryResource : IDisposable
     public GraphicsBuffer Header { get; }          // GPU-written counts + bounds
     public GraphicsBuffer Indices { get; }         // render primitives
     public GraphicsBuffer DrawArgs { get; }        // indirect args, GPU-written
-    public TopologyBuffers Topology { get; }       // CSR, edges, incidence
+    public TopologyBuffers Topology { get; }       // committed CSR, edges, incidence
+    public TopologyScratchBuffers TopologyScratch { get; } // provisional count/scatter buffers
+    public GeometryRegionBuffers Regions { get; }  // optional region table
     public AttributeSet Attributes { get; }        // all metadata incl. rest geometry
     public LiveStateBuffers Live { get; }          // positions/normals consumed by renderers
+    public Mesh Mesh { get; }                      // mesh-bridge target, where applicable
     public Bounds LocalBounds { get; }             // from one-off header readback + margin
     public int Version { get; }                    // bumped on regeneration
 }
 ```
 
-**Capacities vs. counts.** Analytic generators know exact counts. Future generators (particle networks, Voronoi) only know upper bounds, so actual counts are written by the GPU into `Header`, and all draws/dispatches that depend on them use `DrawArgs` / indirect dispatch arguments. Phase 1 builds this path even though its generators are exact.
+`GeometryResource` owns the chosen render backing. On the mesh-bridge path, it owns the `Mesh` and uses that mesh's raw vertex/index buffers. `Indices` and the dynamic-vertex backing exposed through `Live` are logical aliases for those mesh buffers, not independently allocated copies.
+
+**Capacities vs. counts.** Analytic generators know exact counts. Future generators (particle networks, Voronoi) only know upper bounds, so actual counts can be written by the GPU into `Header`, and dependent draws/dispatches can use `DrawArgs`. Phase 1 initialises this header/indirect path but does not require variable-count generation.
 
 ```hlsl
 struct GeometryHeader
@@ -191,28 +199,40 @@ Compressed sparse row, undirected graph, deterministic ordering.
 | Buffer | Type | Size | Notes |
 | --- | --- | --- | --- |
 | `_NeighbourOffsets` | `uint` | V+1 | CSR offsets |
-| `_Neighbours` | `uint` | 2E | Sorted ascending, then cyclically ordered where `orderedOneRing` |
+| `_Neighbours` | `uint` | 2E | Stored in ascending vertex-id order |
 | `_NeighbourEdge` | `uint` | 2E | Edge id for each neighbour slot → reach per-edge data from the vertex view |
 | `_Edges` | `uint2` | E | `x < y`, sorted |
 | `_EdgeRestLength` | `float` | E | From rest positions |
 | `_EdgeType` | `uint` | E | Structural / shear / bend / long-range (Phase 1: structural only; enum fixed now) |
-| `_VertexFaceOffsets`, `_VertexFaces` | `uint` | V+1, 3F | Vertex→face incidence for normals and one-ring ordering |
+| `_VertexFaceOffsets`, `_VertexFaces` | `uint` | V+1, 3F | Vertex→face incidence in deterministic primitive-id order |
+
+The committed topology is always vertex-id ordered. If a cyclic one-ring view is later needed, store it separately; do not reinterpret the canonical CSR ordering. `MAX_SORT_DEGREE` is a layout-defined limit, and exceeding it is a generation failure rather than a partially valid result.
+
+The builder also owns provisional buffers which are not part of the committed topology contract:
+
+| Provisional buffer | Capacity | Purpose |
+| --- | --- | --- |
+| Degree/slot cursors | V | Count and scatter primitive-edge occurrences |
+| Provisional neighbour list | 6F for triangles; 2L for lines | Pre-deduplication scatter destination |
+| Raw incidence list | 3F for triangles | Face incidence before final compaction |
+| Scan work | Derived from the corresponding input capacity | Prefix sums for all multi-level scans |
 
 A fixed-`MAX_NEIGHBOURS` view is **not** stored; it can be produced from CSR by a conversion kernel later if profiling favours it.
 
 ### 4.3 Live state (renderer input, future simulation output)
 
-| Buffer | Type | Phase 1 writer | Future writer |
+| Logical buffer | Type | Phase 1 writer | Future writer |
 | --- | --- | --- | --- |
-| `_LivePositions` | `float3` | Rest copy / test deformer | Simulation final substep |
-| `_LiveNormals` | `float3` (or oct-encoded) | Normals pass | Normals pass |
-| `_PrevPositions` | `float3` | Copy before update | Same (motion vectors) |
+| `_DynamicVertices` | `DynamicVertex { float3 position; float3 normal; }` | Generator/rest copy + normals pass | Simulation final substep + normals pass |
+| `_PrevPositions` | `float3` | Copy once before an update | Same (motion vectors) |
 
-On the mesh-bridge path, `_LivePositions`/`_LiveNormals` **are** the mesh's dynamic vertex stream (§6.2) so no extra copy is needed. Simulation ping-pong buffers are owned by the future simulation module, not by `GeometryResource`.
+`_DynamicVertices` is one backing buffer, not two independently owned position/normal buffers. Phase 1 binds it as a raw byte buffer and uses shared byte-offset constants. The later procedural-draw implementation may consume an equivalent structured `DynamicVertex` view where the API permits it.
+
+On the mesh-bridge path, `_DynamicVertices` is the mesh stream-0 buffer obtained through `Mesh.GetVertexBuffer(0)`. There is no per-frame mesh-export copy. Generation, normals and any test deformation write the correct interleaved offsets directly. A static stream is used for attributes that are packed into the render mesh. Simulation ping-pong buffers remain owned by the future simulation module.
 
 ### 4.4 Element domains
 
-Every attribute belongs to one domain: `Vertex`, `Edge`, `Primitive` (face/segment), `Region`, `Geometry`. Region-level data (e.g. per-branch stiffness) is stored once and referenced via a `RegionId` vertex attribute.
+Every attribute belongs to one domain: `Vertex`, `Corner`, `Edge`, `Primitive` (face/segment), `Region`, `Geometry`. Corner domain has one entry per primitive corner and is present to avoid assigning several incident face/region values to a single welded vertex. Region-level data is stored once. Refer to it with an attribute on the domain whose identity is unambiguous; Phase 1 icosahedron `RegionId` belongs to `Primitive`, with a `Corner` value available only if a render shader needs it.
 
 ---
 
@@ -221,7 +241,7 @@ Every attribute belongs to one domain: `Vertex`, `Edge`, `Primitive` (face/segme
 ### 5.1 Descriptors
 
 ```csharp
-public enum AttributeDomain { Vertex, Edge, Primitive, Region, Geometry }
+public enum AttributeDomain { Vertex, Corner, Edge, Primitive, Region, Geometry }
 public enum AttributeFormat { Float, Float2, Float3, Float4, UInt, UInt2 }
 public enum AttributeInterpolation { Smooth, Flat }        // IDs are Flat
 public enum AttributeLifetime { Static, Dynamic }
@@ -245,21 +265,21 @@ public sealed class AttributeDescriptor
 
 ### 5.2 Phase 1 attribute set
 
-Core (every surface generator):
+Core (required for the Phase 1 icosphere; later surface generators reuse these contracts):
 
 | Attribute | Domain | Format | Source |
 | --- | --- | --- | --- |
 | `RestPosition` | Vertex | Float3 | Generator |
 | `RestNormal` | Vertex | Float3 | Generator (analytic) or normals pass |
 | `RestTangent` | Vertex | Float4 | Generator (w = handedness) |
-| `LocalCoord` | Vertex | Float2/3 | Generator (UV, (u,θ) on tube, barycentric-face on icosphere) |
-| `RegionId` | Vertex | UInt, Flat | Generator (icosahedron face, grid tile, tube segment, branch) |
+| `LocalCoord` | Vertex or Corner | Float2/3 | Continuous vertex coordinate where unique; barycentric corner coordinates for icosphere rendering |
+| `RegionId` | Primitive | UInt, Flat | Generator (icosahedron face, grid tile, tube segment, branch) |
 | `BoundaryWeight` | Vertex | Float | Topology builder (boundary flag) → operator |
 | `NeighbourCount` | Vertex | UInt | Topology builder |
 | `Curvature` | Vertex | Float | Operator (umbrella / cotan Laplacian on rest positions) |
 | `EdgeRestLength` | Edge | Float | Topology builder |
 
-Structural (when applicable):
+Reserved structural attributes (post-Phase-1):
 
 | Attribute | Generators |
 | --- | --- |
@@ -269,7 +289,7 @@ Structural (when applicable):
 | `Direction` | Tube/Branching tangent, grid u-axis |
 | `DistanceToBoundary` | Grid, open tube (graph distance from boundary) |
 
-Physical / interaction defaults (filled by recipes, consumed in later phases):
+Reserved physical / interaction defaults (filled by recipes and consumed in later phases):
 
 | Attribute | Format | Notes |
 | --- | --- | --- |
@@ -287,7 +307,7 @@ Small reusable kernels in `AttributeOps.compute`, configured per generator by an
 | Operator | Description |
 | --- | --- |
 | `Fill(constant)` | Constant value |
-| `GraphDistance(sources)` | Edge-length-weighted shortest path over CSR (iterative relaxation; GPU "changed" flag makes trailing iterations no-ops, no readback) |
+| `GraphDistance(sources)` | Edge-length-weighted shortest path over CSR. A post-phase implementation must specify `MaxIterations`, an infinite-distance sentinel, floating-point tolerance, and an indirect-dispatch or asynchronous-readback termination strategy. |
 | `Normalise` | Min/max via GPU reduction → `*01` attribute; range also written to a small stats buffer used by debug views |
 | `Remap(curve)` | `AnimationCurve` baked to a 256-sample buffer |
 | `Combine(a, b, op)` | Mul / add / lerp |
@@ -302,6 +322,8 @@ Example recipe: `Stiffness = Remap(DistanceFromRoot01, stiffCurve)`; `AudioSensi
 
 ### 6.1 Two complementary paths
 
+Only the mesh-bridge path is implemented and accepted in Phase 1. The procedural path remains a post-phase extension; keeping it in the design prevents the resource contract from becoming tied to `Mesh`.
+
 | Path | Mechanism | Used for |
 | --- | --- | --- |
 | **Mesh bridge** (primary surface path) | `Mesh` with GPU-writable vertex/index buffers, written by compute, drawn by `MeshRenderer` (or `Graphics.RenderMesh`) | Production surfaces: URP Lit, Shader Graph, shadows, depth/normals, SSAO, decals, XR — all for free |
@@ -312,9 +334,9 @@ Example recipe: `Stiffness = Remap(DistanceFromRoot01, stiffCurve)`; `AudioSensi
 - Vertex layout, two streams:
   - Stream 0 (dynamic, written per update): `Position float3`, `Normal float3` (later `Tangent` if needed).
   - Stream 1 (static, written once): `Tangent float4`, `TexCoord0 = LocalCoord`, `TexCoord1..3` = packed hot metadata selected by the recipe (e.g. `DistanceFromRoot01`, `RegionId` as float, `AudioSensitivity`). This makes the most common metadata available to stock Shader Graph without custom nodes.
-- `mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw`, `mesh.indexBufferTarget |= GraphicsBuffer.Target.Raw`; buffers obtained with `GetVertexBuffer(stream)` / `GetIndexBuffer()` and written by a `MeshExport.compute` kernel using `RWByteAddressBuffer` (with stride/offset constants so layout changes don't require kernel changes).
+- `mesh.vertexBufferTarget |= GraphicsBuffer.Target.Raw`, `mesh.indexBufferTarget |= GraphicsBuffer.Target.Raw`; buffers obtained with `GetVertexBuffer(stream)` / `GetIndexBuffer()` and written directly by generator/normals kernels using `RWByteAddressBuffer` with shared stride/offset constants. Phase 1 does not maintain a separate live-position buffer followed by a redundant mesh-export copy.
 - `mesh.bounds` set from the GPU header (one-off async readback after generation) plus a configurable deformation margin. No per-frame bounds readback.
-- Vertex ids in the mesh equal attribute buffer indices (no remapping, no seam splitting in Phase 1), so any metadata buffer can also be sampled by Vertex ID.
+- Vertex ids in the mesh equal vertex-attribute buffer indices (no remapping, no seam splitting in Phase 1), so vertex-domain metadata can be sampled by Vertex ID. Primitive/corner attributes require primitive/corner IDs and must not be addressed as vertex-domain values.
 - Seams: wrapped surfaces (torus, cylinder, tube) are welded for simulation; `LocalCoord` is stored periodic. Shaders that need seam-free UVs use the analytic coordinate (angle) rather than interpolated UVs. Optional render-only seam split is deferred.
 - `MaterialPropertyBlock` breaks SRP Batcher compatibility for that renderer; acceptable for a handful of objects. Alternative: per-object material instance with `SetBuffer`.
 - Exclude from GPU Resident Drawer (dynamic mesh), confirmed in S1.
@@ -331,8 +353,9 @@ Example recipe: `Stiffness = Remap(DistanceFromRoot01, stiffCurve)`; `AudioSensi
 
 ### 6.5 Update scheduling
 
-- `GeometryCommandScheduler` records generation and per-frame passes into a `CommandBuffer` executed before camera rendering (`RenderPipelineManager.beginContextRendering`), so all cameras (incl. both XR eyes and Scene view) see the same state.
-- Generation is event-driven (settings change / explicit request). Per-frame work in Phase 1 is only the optional test deformer + normals + mesh export.
+- `GeometryCommandScheduler` records generation into a `CommandBuffer`. Phase 1 does not execute mutable generation work once per camera callback; regeneration is requested explicitly and recorded once on the next update.
+- Generation is event-driven (settings change / explicit request). No per-frame simulation is required for Phase 1 acceptance.
+- Any future per-frame pass has one explicit update owner and a monotonic update version. Context callbacks may render many cameras, but a pass runs at most once per frame/version.
 - Optional later: move per-frame passes into a render graph compute pass via a `ScriptableRendererFeature`, and evaluate async compute for simulation.
 - Every pass is wrapped in a `ProfilingSampler` so it appears in the Profiler (GPU module), Frame Debugger and RenderDoc captures.
 
@@ -342,7 +365,7 @@ Per vertex, area-weighted sum of incident face normals using `_VertexFaceOffsets
 
 ### 6.7 Test deformer (debug only)
 
-A tiny kernel that displaces `_LivePositions` along `RestNormal` by `amplitude * sin(k * attr - ωt)` where `attr` is any selected scalar attribute. It is not the simulation; it exists to validate the dynamic rendering path (stream writes, normals recompute, bounds margin, prev positions) and to visually prove that metadata is meaningful (e.g. a wave following `DistanceFromRoot`).
+A post-phase kernel may displace `_DynamicVertices.position` along `RestNormal` by `amplitude * sin(k * attr - ωt)`. It is not the simulation and is deferred because the first acceptance gate uses static generated geometry.
 
 ---
 
@@ -358,7 +381,7 @@ public interface IGeometryGenerator
 }
 ```
 
-Generators are `ScriptableObject` assets (`GeometryGeneratorAsset`) holding serialised settings + attribute recipe. After `Record`, the shared pipeline runs: **TopologyBuilder → Normals (if needed) → Attribute recipe → Validation (optional) → Mesh export**.
+Phase 1 implements one `IcosphereGeneratorAsset`; the interface remains suitable for later generators. After `Record`, the shared pipeline runs: **TopologyBuilder → Normals → Phase-1 core attributes → Validation → bounds update**. Writes occur directly into the selected renderer backing; there is no final mesh-export copy.
 
 Randomness uses a PCG hash of `(seed, elementId)`; no order-dependent RNG.
 
@@ -374,7 +397,7 @@ GPU-friendly deduplication **by construction** rather than hashing:
 - `ResolveVertex(face, i, j)` maps any face-lattice point to its canonical id — the single function that guarantees shared midpoints are never duplicated.
 - Kernels: `IcoVertices` (one thread per unique vertex, projects barycentric point to sphere), `IcoTriangles` (one thread per output triangle, `20n²` total).
 - Projection modes: normalised (gnomonic) and slerp-based (more uniform); recursive-midpoint-equivalent positions optional.
-- Attributes: `RegionId` = icosahedron face, `LocalCoord` = face barycentric, analytic `RestNormal`/`RestTangent`.
+- Attributes: primitive-domain `RegionId` = icosahedron face; corner-domain `LocalCoord` = face barycentric; analytic vertex-domain `RestNormal`/`RestTangent`.
 - Invariants: `V = 10n² + 2`, `E = 30n²`, `F = 20n²`, `V − E + F = 2`, 12 vertices of degree 5, rest degree 6.
 
 ### 7.2 Parametric surface
@@ -409,14 +432,14 @@ Proves the contract for non-surface geometry and is the richest metadata produce
 
 Input: primitive index buffer (triangles or lines) + vertex count. Output: §4.2 buffers. Deterministic regardless of thread scheduling.
 
-1. **Count** — per primitive edge `(a,b)`: `InterlockedAdd` degree for both `a` and `b`; per triangle: incidence count per corner.
+1. **Count** — per primitive edge `(a,b)`: `InterlockedAdd` degree for both `a` and `b`; per triangle: incidence count per corner. Counts include provisional duplicate neighbour occurrences.
 2. **Scan** — exclusive prefix sum (`Scan.compute`, multi-level, supports millions of elements) → provisional offsets.
-3. **Scatter** — write neighbours via atomic cursors (order nondeterministic at this stage).
-4. **Sort + dedupe per vertex** — insertion sort within each vertex range (degrees are small; vertices above `MAX_SORT_DEGREE` set a header flag and fail validation).
+3. **Scatter** — write into provisional arrays via atomic cursors (order nondeterministic at this stage). The provisional neighbour capacity is `6F` for triangles or `2L` for lines.
+4. **Sort + dedupe per vertex** — sort by neighbour id, remove duplicates, and establish deterministic canonical ordering within each vertex range. Vertices above `MAX_SORT_DEGREE` fail generation.
 5. **Compact** — second scan over unique counts → final `_NeighbourOffsets`, `_Neighbours`.
 6. **Edges** — each vertex emits edges to neighbours with larger id; scan gives deterministic edge ids; fill `_NeighbourEdge` by lookup; compute `_EdgeRestLength`.
 7. **Incidence** — same count/scan/scatter/sort pattern for vertex→face.
-8. **One-ring ordering** (manifold triangle meshes) — per vertex, walk incident faces to order neighbours cyclically; boundary vertices start at their boundary edge; sets `orderedOneRing`. Enables cheap one-ring normals, Laplacians and curvature later.
+8. **One-ring ordering** (post-Phase-1 option) — build a separate cyclic ordering by walking incident faces. Boundary vertices start at their boundary edge and set `orderedOneRing`. It must never reorder committed canonical CSR storage.
 9. **Boundary detection** — an edge used by exactly one triangle marks both vertices as boundary.
 
 Analytic connectivity fast paths for grid/tube can be added later if profiling shows the builder matters; generation is not per-frame, so correctness and reuse take priority.
@@ -464,7 +487,7 @@ The GPU picking kernel doubles as the prototype for VR interaction broad/narrow-
 
 ### 10.3 Leak and memory tracking
 
-All buffers are allocated through `GpuBufferRegistry` (name, owner, size). Exposed in the Geometry Lab and asserted empty after disposal in tests. Buffers are reused when settings change but capacity is sufficient.
+All directly allocated buffers are allocated through `GpuBufferRegistry` (name, owner, size). Mesh-owned buffers are registered as non-owning aliases with their actual count and stride. Registry ownership and aliases are asserted clean after disposal in tests. Buffers may be reused when settings change and capacity is sufficient.
 
 ---
 
@@ -474,15 +497,15 @@ What later phases need, and where Phase 1 provides it:
 
 | Future system | Needs | Provided by Phase 1 |
 | --- | --- | --- |
-| Mass-spring / XPBD | CSR neighbours, edge rest lengths, edge types, mass/stiffness/damping/constraint weights, live position output, prev positions | §4.2, §4.3, §5.2 recipes |
-| Bending / shear springs | 2-ring or diagonal edges | `EdgeType` enum, grid diagonals; 2-ring edges added later as extra `EdgeType` |
-| Wave / energy propagation | Graph, edge lengths, wave speed/attenuation, source distances | CSR, `GraphDistance` operator, `WaveSpeed` attribute |
-| Deformation fields | Declared attribute dependencies, rest normals/directions | `AttributeDescriptor` + `Requires/Produces` validation |
-| Audio reactivity | Per-vertex band weights, region routing | `AudioSensitivity` (float4), `RegionId` + region table |
-| VR interaction | Spatial queries, interaction weights, region selection | Picking kernel, `InteractionWeight`/`GrabWeight`, region table with bounds |
-| Topology-varying generators (particles, Voronoi) | GPU-determined counts | `GeometryHeader` + indirect draw/dispatch args |
-| Rendering effects | LocalCoord, curvature, IDs, prev positions for motion vectors | §5.2, §6.2 streams, S7 findings |
-| VR performance | Stereo-correct draws, minimal per-frame passes | S3, mesh-bridge path, event-driven generation |
+| Mass-spring / XPBD | CSR neighbours, edge rest lengths, edge types, live position output, prev positions | §4.2 buffers and one dynamic-vertex backing are reserved; simulation attributes are later additions |
+| Bending / shear springs | 2-ring or diagonal edges | `EdgeType` is reserved; concrete edge recipes are later additions |
+| Wave / energy propagation | Graph, edge lengths, source distances | CSR and edge lengths now; `GraphDistance` and `WaveSpeed` are post-Phase-1 |
+| Deformation fields | Declared attribute dependencies, rest normals/directions | Domain-aware descriptors now; consumers are post-Phase-1 |
+| Audio reactivity | Per-vertex band weights, region routing | Domain contract and primitive `RegionId` now; response attributes are post-Phase-1 |
+| VR interaction | Spatial queries and region selection | Reserved domains and region storage now; picking is post-Phase-1 |
+| Topology-varying generators (particles, Voronoi) | GPU-determined counts | Header and indirect-argument slots now; variable-count paths are post-Phase-1 |
+| Rendering effects | Coordinates, curvature, IDs | Phase-1 core metadata layout; motion vectors remain deferred |
+| VR performance | Stereo-correct draws | Mesh-bridge integration now; XR verification is deferred to S3 |
 
 ---
 
@@ -528,13 +551,13 @@ Practical notes for agents:
 
 | Suite | Type | Content |
 | --- | --- | --- |
-| `Generators.*` | EditMode, GPU | Each generator × parameter matrix (e.g. icosphere n ∈ {1,2,3,4,8,16,64}; grids with/without wrap/diagonals; tubes open/closed/caps): counts, invariants, validator clean |
-| `Topology.*` | EditMode, GPU | Builder on hand-made fixtures (single triangle, quad, tetrahedron, non-manifold bowtie, disconnected parts, lines); determinism (two runs ⇒ identical bytes) |
-| `Attributes.*` | EditMode, GPU | Graph distance vs. CPU Dijkstra; normalise range; remap; curvature sign on sphere; analytic vs. generic normals within tolerance |
+| `Generators.*` | EditMode, GPU | Phase 1: icosphere n ∈ {1,2,3,4,8,16,64}; counts, invariants and validator clean |
+| `Topology.*` | EditMode, GPU | Phase 1 triangle fixtures: single triangle, quad, tetrahedron, non-manifold bowtie and disconnected parts; topology bytes deterministic across two runs |
+| `Attributes.*` | EditMode, GPU | Phase 1 core attributes: curvature sign on sphere; analytic vs. generic normals within tolerance; primitive/corner domain cardinalities |
 | `Reference.*` | EditMode | Icosphere with `n = 2^s` vs. CPU reference builder: same V/E/F and degree histogram; positions match as point sets (in recursive-equivalent projection mode) |
 | `Lifecycle.*` | EditMode | Regenerate / resize / dispose loops; `GpuBufferRegistry` empty afterwards |
-| `Rendering.*` | PlayMode, Graphics Test Framework (`com.unity.testframework.graphics`) | Reference images per generator × debug view (attribute colouring, wireframe, glyphs) and mesh-bridge Lit rendering; per graphics API references |
-| `Performance.*` | PlayMode, Performance Testing package (`com.unity.test-framework.performance`) | GPU time of generation, topology build, normals, mesh export at several sizes; memory per vertex |
+| `Rendering.*` | PlayMode | Phase 1 smoke test: non-empty mesh, valid bounds, URP Lit visibility, and one stable captured reference if the Graphics Test Framework is available |
+| `Performance.*` | Post-Phase-1, Performance Testing package | GPU generation/topology/normals timings and memory per vertex |
 
 GPU tests read back with `GraphicsBuffer.GetData` / `AsyncGPUReadback.WaitAllRequests()` — allowed in tests only. Tests that need compute call `Assume.That(SystemInfo.supportsComputeShaders)` so misconfigured agents report *inconclusive* rather than false passes.
 
@@ -563,36 +586,38 @@ Fallback (no CLI, e.g. minimal CI images): `Tools/ci/run-tests.ps1` wraps the ra
 ... -force-d3d12 | -force-vulkan
 ```
 
-Notes: do not combine `-quit` with `-runTests`; parse the NUnit XML for results; graphics test reference images are stored per platform/API and updated via the Graphics Test Framework's result-collection workflow.
+Notes: do not combine `-quit` with `-runTests`; parse the NUnit XML for results. A single Phase 1 graphics smoke reference is optional until the Graphics Test Framework is added; later visual suites store reference images per platform/API.
 
 ### 12.4 CI pipeline
 
 `unity ci init` can scaffold the CI configuration; `unity test --shard n/m` splits long suites across agents and `--retries` flags flaky GPU tests.
 
 1. Compile check (open project in batch mode, fail on compile errors / shader compile errors in log).
-2. EditMode GPU suites (every change).
-3. PlayMode Rendering suite (every change, on a GPU agent).
-4. Performance suite (nightly; results archived and compared against a baseline with tolerance).
-5. Artefacts: NUnit XML, editor logs, failed-image diffs, performance JSON.
+2. Phase 1 EditMode GPU suites (every change).
+3. Phase 1 PlayMode rendering smoke test (every change, on a GPU agent).
+4. Post-phase: graphics reference suite and performance baseline jobs.
+5. Artefacts: NUnit XML, editor logs, and later failed-image/performance reports.
 
 ---
 
 ## 13. Milestones and acceptance criteria
 
-Each milestone is complete only when its tests pass via the CLI pipeline.
+Each milestone is complete only when its tests pass via the CLI pipeline. Phase 1 ends at M3; M4 onward is the ordered post-phase backlog.
 
-**M0 — Spikes (§3).** `ReactiveGeometry` baseline confirmed; Unity CLI + Pipeline + Test Framework already in place (§12.1); remaining test packages added; each spike committed under `Assets/Spikes/` with scene, `NOTES.md`, captures and a passing `Spike` test; results summarised in §3.2; CI agent runs a trivial compute test headless.
+**M0 — Required spikes (§3).** Confirm the `ReactiveGeometry` baseline plus S1 mesh raw-buffer writes and S6 CLI GPU testing. S0, S1, S4 and S6 have reproducible artefacts and passing focused tests where applicable; S4 confirms the buffer binding capability selected by the final resource contract. S6 must record the actual graphics device and API; it must not claim a no-GPU/headless run when a real GPU was used.
 
 **M1 — Foundations.** Package skeleton, assemblies, `GpuBufferRegistry`, `GeometryResource`, `GeometryHeader`, attribute registry/descriptors, scan + reduce kernels with tests, CLI test script.
 *Accept:* scan/reduce match CPU for sizes 1…2²⁰; registry reports zero leaks.
 
-**M2 — Icosphere + topology builder.** Canonical-id icosphere kernels, generic topology builder, validator (GPU + C#).
-*Accept:* invariants for all tested `n`; validator clean; deterministic bytes; `Reference.*` passes.
+**M2 — Icosphere + topology builder.** Canonical-id icosphere kernels, triangle topology builder, validator (GPU + C#).
+*Accept:* invariants for all tested `n`; validator clean; index/topology bytes deterministic on the same GPU/API; floating-point values within documented tolerances; `Reference.*` passes.
 
-**M3 — URP rendering.** Mesh bridge (streams, raw buffers, bounds), procedural draw path, `ProcGeoLit`, XR single-pass instanced check, scheduler + profiling samplers.
-*Accept:* icosphere rendered with URP Lit and a Shader Graph material, casting/receiving shadows, in Game/Scene view and Mock HMD; no per-frame readback (verified by profiler/Frame Debugger); `Rendering.*` reference images pass.
+**M3 — URP mesh-bridge rendering.** Mesh streams, direct raw-buffer writes, bounds, simple URP Lit/Shader Graph verification, event-driven generation and profiling samplers.
+*Accept:* icosphere is visible in Game and Scene view, renders with URP Lit, has valid bounds, casts/receives the configured standard URP effects, and performs no per-frame readback or redundant mesh-export copy. `Rendering.*` smoke test passes. Procedural drawing and XR move out of this gate.
 
-**M4 — Debug tools.** Attribute colouring, wireframe, points, glyphs, rest-vs-live, picking + neighbourhood probe, Geometry Lab window, stats, mesh export, test deformer + normals pass.
+### Post-Phase-1 backlog
+
+**M4 — Debug tools.** Attribute colouring, wireframe, points, glyphs, rest-vs-live, picking + neighbourhood probe, Geometry Lab window, stats, mesh export and test deformer.
 *Accept:* every attribute of the icosphere viewable; picked vertex shows correct 5/6 neighbours; deformer animates with correct lighting.
 
 **M5 — Attribute operators and recipes.** Graph distance, normalise, remap, combine, curvature, boundary; recipe asset UI; Shader Graph sub-graph.
@@ -615,11 +640,11 @@ Each milestone is complete only when its tests pass via the CLI pipeline.
 
 | Risk | Mitigation |
 | --- | --- |
-| Unity 6.6 API/behaviour differences (render graph, mesh raw buffers, RenderPrimitives in XR) | M0 spikes before committing; keep both render paths |
+| Unity 6.6 API/behaviour differences (render graph and mesh raw buffers) | Gate M1 on the required M0 spikes; defer XR and RenderPrimitives verification |
 | Headless CI without usable GPU | S6; `Assume` on compute support; dedicated GPU agent |
 | Motion vectors / TAA artefacts on GPU-deformed meshes | Document approach in S7; `_PrevPositions` slot reserved; implement with simulation phase |
 | Atomic ordering nondeterminism | Sort + compact stage in topology builder; determinism tests |
 | High-degree vertices (future graphs) slow per-vertex sort | `MAX_SORT_DEGREE` flag; fall back to segmented GPU radix sort if needed |
-| Buffer layout churn affecting shaders | Layouts expressed as constants shared via include files; mesh export kernel driven by stride/offset parameters |
+| Buffer layout churn affecting shaders | Layouts expressed as constants shared via include files; all generators write the declared dynamic-vertex offsets directly |
 | Metadata explosion / bandwidth | Optional, per-generator attributes; hot attributes packed into mesh stream 1; profile before repacking |
 | Graphics API differences (D3D12 / Vulkan / Metal) | Rendering + generator tests run per API on CI where available |
