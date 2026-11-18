@@ -570,6 +570,8 @@ Implement the GPU simulation vertical slice on the icosphere:
 
 Completion means the existing rendered icosphere can deform, propagate local changes through topology, return to rest, and remain numerically valid under documented limits.
 
+See the detailed implementation plan in [Phase2-DynamicNeighbourSimulation.md](Implementation/Phase2-DynamicNeighbourSimulation.md), including the GPU data contract, fixed-step pipeline, renderer integration, automated tests, milestones, and interactive Phase 2 test scenes.
+
 ### Phase 3 — Fields, operators and debugging
 
 Add reusable metadata-driven operations and observability:
