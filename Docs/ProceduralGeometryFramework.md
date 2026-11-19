@@ -585,6 +585,8 @@ Add reusable metadata-driven operations and observability:
 
 Completion means a field can be configured from declared attributes and exercised without geometry-specific solver code.
 
+See the detailed implementation plan in [Phase3-FieldsOperatorsDebugging.md](Implementation/Phase3-FieldsOperatorsDebugging.md), including operator recipes, GPU graph distance, field composition, debugging/picking, UI Toolkit test scenes, tests, and milestones.
+
 ### Phase 4 — Audio reactivity
 
 Add FFT/RMS/onset analysis, compact smoothed GPU parameters, and configurable audio mappings. Prove distinct bass, mid, high and onset responses while preserving simulation stability.

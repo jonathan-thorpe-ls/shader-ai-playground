@@ -9,7 +9,7 @@ namespace Sonosthesia.ProcGeo
     {
         [SerializeField] private int impulseVertex;
         [SerializeField] private Vector3 impulseDirection = Vector3.up;
-        [SerializeField, Min(0f)] private float impulseMagnitude = 2f;
+        [SerializeField, Min(0f)] private float impulseMagnitude = 8f;
         [SerializeField] private bool repeatImpulses;
         [SerializeField, Min(0.05f)] private float repeatInterval = 0.5f;
         [SerializeField] private Preset initialPreset = Preset.Nominal;

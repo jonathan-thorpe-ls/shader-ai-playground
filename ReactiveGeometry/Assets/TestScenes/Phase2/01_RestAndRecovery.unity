@@ -466,7 +466,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Sonosthesia.ProcGeo.Phase2SceneController
   impulseVertex: 0
   impulseDirection: {x: 0, y: 1, z: 0}
-  impulseMagnitude: 2
+  impulseMagnitude: 8
   repeatImpulses: 0
   repeatInterval: 0.75
   initialPreset: 1
