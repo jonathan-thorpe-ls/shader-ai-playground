@@ -335,7 +335,8 @@ namespace Sonosthesia.ProcGeo
             fieldSettings.graphSourceVertex = Mathf.Clamp(
                 fieldSettings.graphSourceVertex, 0, _resource.Layout.VertexCount - 1);
             _graphDistance = new GraphDistanceOperator(
-                new[] { fieldSettings.graphSourceVertex });
+                new[] { fieldSettings.graphSourceVertex },
+                Mathf.Max(8, frequency * 8));
             _graphDistance.Execute(_resource);
             List<IGeometryField> fields = new();
             if (fieldSettings.pulseEnabled)

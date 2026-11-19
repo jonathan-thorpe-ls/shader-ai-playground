@@ -8,6 +8,7 @@ namespace Sonosthesia.ProcGeo
     public sealed class GraphDistanceOperator : IAttributeOperator, IDisposable
     {
         private readonly int[] _sources;
+        private readonly int _maximumRounds;
         private readonly ComputeShader _shader;
         private readonly int _initializeKernel;
         private readonly int _expandKernel;
@@ -23,12 +24,14 @@ namespace Sonosthesia.ProcGeo
 
         public GraphDistanceOperator(
             IEnumerable<int> sources,
+            int maximumRounds = -1,
             ComputeShader shader = null)
         {
             if (sources == null) throw new ArgumentNullException(nameof(sources));
             _sources = new List<int>(sources).ToArray();
             if (_sources.Length == 0)
                 throw new ArgumentException("At least one source is required.", nameof(sources));
+            _maximumRounds = maximumRounds;
             _shader = shader != null
                 ? shader
                 : Resources.Load<ComputeShader>("ProcGeo/GraphDistance")
@@ -76,7 +79,10 @@ namespace Sonosthesia.ProcGeo
         {
             Allocate(resource);
             int groups = (resource.Layout.VertexCount + 63) / 64;
-            int rounds = Mathf.Max(1, resource.Layout.VertexCount - 1);
+            int rounds = _maximumRounds > 0
+                ? Mathf.Min(resource.Layout.VertexCount - 1, _maximumRounds)
+                : resource.Layout.VertexCount - 1;
+            rounds = Mathf.Max(1, rounds);
             command.SetComputeIntParam(
                 _shader, "_VertexCount", resource.Layout.VertexCount);
             command.SetComputeIntParam(_shader, "_SourceCount", _sources.Length);

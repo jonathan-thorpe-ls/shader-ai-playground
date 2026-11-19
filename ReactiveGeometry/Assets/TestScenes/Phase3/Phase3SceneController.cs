@@ -25,8 +25,14 @@ namespace Sonosthesia.ProcGeo
         private Slider _amplitude;
         private Slider _width;
         private Slider _pulseRate;
-        private Toggle _pulse;
-        private Toggle _directional;
+        private Slider _directionalStrength;
+        private Button _fieldNoneButton;
+        private Button _fieldPulseButton;
+        private Button _fieldDirectionalButton;
+        private Button _fieldCombinedButton;
+        private Button _litButton;
+        private Button _distanceButton;
+        private Button _curvatureButton;
         private Toggle _wireframe;
         private Toggle _vertices;
         private Toggle _normals;
@@ -39,6 +45,7 @@ namespace Sonosthesia.ProcGeo
         private float _nextDiagnosticsTime;
         private VisualElement _root;
         private DebugView _debugView = DebugView.GraphDistance;
+        private FieldRecipe _fieldRecipe = FieldRecipe.None;
 
         public enum SceneMode
         {
@@ -52,6 +59,14 @@ namespace Sonosthesia.ProcGeo
             Lit,
             GraphDistance,
             Curvature
+        }
+
+        private enum FieldRecipe
+        {
+            None,
+            Pulse,
+            Directional,
+            PulseAndDirectional
         }
 
         private void Awake()
@@ -99,6 +114,9 @@ namespace Sonosthesia.ProcGeo
                 sceneMode != SceneMode.GraphDistance;
             fieldSettings.directionalEnabled =
                 sceneMode == SceneMode.DebugInspection;
+            if (fieldSettings.directionalEnabled &&
+                fieldSettings.directionalStrength <= 0f)
+                fieldSettings.directionalStrength = 2f;
         }
 
         private void BindUi()
@@ -110,8 +128,14 @@ namespace Sonosthesia.ProcGeo
             _amplitude = root.Q<Slider>("amplitudeSlider");
             _width = root.Q<Slider>("widthSlider");
             _pulseRate = root.Q<Slider>("pulseRateSlider");
-            _pulse = root.Q<Toggle>("pulseToggle");
-            _directional = root.Q<Toggle>("directionalToggle");
+            _directionalStrength = root.Q<Slider>("directionalStrengthSlider");
+            _fieldNoneButton = root.Q<Button>("fieldNoneButton");
+            _fieldPulseButton = root.Q<Button>("fieldPulseButton");
+            _fieldDirectionalButton = root.Q<Button>("fieldDirectionalButton");
+            _fieldCombinedButton = root.Q<Button>("fieldCombinedButton");
+            _litButton = root.Q<Button>("litButton");
+            _distanceButton = root.Q<Button>("distanceButton");
+            _curvatureButton = root.Q<Button>("curvatureButton");
             _wireframe = root.Q<Toggle>("wireframeToggle");
             _vertices = root.Q<Toggle>("verticesToggle");
             _normals = root.Q<Toggle>("normalsToggle");
@@ -120,7 +144,11 @@ namespace Sonosthesia.ProcGeo
             _pauseButton = root.Q<Button>("pauseButton");
             if (_density == null || _source == null ||
                 _amplitude == null || _width == null ||
-                _pulseRate == null || _pulse == null || _directional == null ||
+                _pulseRate == null || _directionalStrength == null ||
+                _fieldNoneButton == null || _fieldPulseButton == null ||
+                _fieldDirectionalButton == null || _fieldCombinedButton == null ||
+                _litButton == null || _distanceButton == null ||
+                _curvatureButton == null ||
                 _wireframe == null || _vertices == null || _normals == null ||
                 _diagnostics == null || _inspection == null || _pauseButton == null)
             {
@@ -137,14 +165,19 @@ namespace Sonosthesia.ProcGeo
             _amplitude.SetValueWithoutNotify(fieldSettings.pulseAmplitude);
             _width.SetValueWithoutNotify(fieldSettings.pulseWidth);
             _pulseRate.SetValueWithoutNotify(fieldSettings.pulseFrequency);
-            _pulse.SetValueWithoutNotify(fieldSettings.pulseEnabled);
-            _directional.SetValueWithoutNotify(fieldSettings.directionalEnabled);
+            _directionalStrength.SetValueWithoutNotify(
+                fieldSettings.directionalStrength);
+            _fieldRecipe = RecipeForSettings(
+                fieldSettings.pulseEnabled,
+                fieldSettings.directionalEnabled);
+            UpdateFieldRecipeSelection();
             _wireframe.SetValueWithoutNotify(false);
             _vertices.SetValueWithoutNotify(false);
             _normals.SetValueWithoutNotify(false);
             _debugView = sceneMode == SceneMode.FieldComposition
                 ? DebugView.Lit
                 : DebugView.GraphDistance;
+            UpdateDebugViewSelection();
             _pauseButtonLabel = new Label("Pause")
             {
                 pickingMode = PickingMode.Ignore
@@ -155,9 +188,13 @@ namespace Sonosthesia.ProcGeo
             root.Q<Button>("applyButton").clicked += ApplyConfiguration;
             root.Q<Button>("resetButton").clicked += ResetSimulation;
             root.Q<Button>("inspectButton").clicked += InspectSource;
-            root.Q<Button>("litButton").clicked += UseLitView;
-            root.Q<Button>("distanceButton").clicked += UseDistanceView;
-            root.Q<Button>("curvatureButton").clicked += UseCurvatureView;
+            _fieldNoneButton.clicked += UseNoFields;
+            _fieldPulseButton.clicked += UsePulseField;
+            _fieldDirectionalButton.clicked += UseDirectionalField;
+            _fieldCombinedButton.clicked += UseCombinedFields;
+            _litButton.clicked += UseLitView;
+            _distanceButton.clicked += UseDistanceView;
+            _curvatureButton.clicked += UseCurvatureView;
             _pauseButton.clicked += TogglePause;
             _wireframe.RegisterValueChangedCallback(SetWireframe);
             _vertices.RegisterValueChangedCallback(SetVertices);
@@ -179,9 +216,13 @@ namespace Sonosthesia.ProcGeo
             root.Q<Button>("applyButton").clicked -= ApplyConfiguration;
             root.Q<Button>("resetButton").clicked -= ResetSimulation;
             root.Q<Button>("inspectButton").clicked -= InspectSource;
-            root.Q<Button>("litButton").clicked -= UseLitView;
-            root.Q<Button>("distanceButton").clicked -= UseDistanceView;
-            root.Q<Button>("curvatureButton").clicked -= UseCurvatureView;
+            _fieldNoneButton.clicked -= UseNoFields;
+            _fieldPulseButton.clicked -= UsePulseField;
+            _fieldDirectionalButton.clicked -= UseDirectionalField;
+            _fieldCombinedButton.clicked -= UseCombinedFields;
+            _litButton.clicked -= UseLitView;
+            _distanceButton.clicked -= UseDistanceView;
+            _curvatureButton.clicked -= UseCurvatureView;
             _pauseButton.clicked -= TogglePause;
             _wireframe.UnregisterValueChangedCallback(SetWireframe);
             _vertices.UnregisterValueChangedCallback(SetVertices);
@@ -199,8 +240,13 @@ namespace Sonosthesia.ProcGeo
                 fieldSettings.pulseAmplitude = _amplitude.value;
                 fieldSettings.pulseWidth = _width.value;
                 fieldSettings.pulseFrequency = _pulseRate.value;
-                fieldSettings.pulseEnabled = _pulse.value;
-                fieldSettings.directionalEnabled = _directional.value;
+                fieldSettings.directionalStrength = _directionalStrength.value;
+                fieldSettings.pulseEnabled =
+                    _fieldRecipe == FieldRecipe.Pulse ||
+                    _fieldRecipe == FieldRecipe.PulseAndDirectional;
+                fieldSettings.directionalEnabled =
+                    _fieldRecipe == FieldRecipe.Directional ||
+                    _fieldRecipe == FieldRecipe.PulseAndDirectional;
                 _inspection.text = "Configuration applied. Inspect the source for details.";
             }
             if (densityChanged)
@@ -280,19 +326,82 @@ namespace Sonosthesia.ProcGeo
         public void UseLitView()
         {
             _debugView = DebugView.Lit;
+            UpdateDebugViewSelection();
             UpdateDebugAttribute();
         }
 
         public void UseDistanceView()
         {
             _debugView = DebugView.GraphDistance;
+            UpdateDebugViewSelection();
             UpdateDebugAttribute();
         }
 
         public void UseCurvatureView()
         {
             _debugView = DebugView.Curvature;
+            UpdateDebugViewSelection();
             UpdateDebugAttribute();
+        }
+
+        private void UseNoFields()
+        {
+            _fieldRecipe = FieldRecipe.None;
+            UpdateFieldRecipeSelection();
+        }
+
+        private void UsePulseField()
+        {
+            _fieldRecipe = FieldRecipe.Pulse;
+            UpdateFieldRecipeSelection();
+        }
+
+        private void UseDirectionalField()
+        {
+            _fieldRecipe = FieldRecipe.Directional;
+            UpdateFieldRecipeSelection();
+        }
+
+        private void UseCombinedFields()
+        {
+            _fieldRecipe = FieldRecipe.PulseAndDirectional;
+            UpdateFieldRecipeSelection();
+        }
+
+        private static FieldRecipe RecipeForSettings(bool pulse, bool directional)
+        {
+            if (pulse && directional) return FieldRecipe.PulseAndDirectional;
+            if (directional) return FieldRecipe.Directional;
+            return pulse ? FieldRecipe.Pulse : FieldRecipe.None;
+        }
+
+        private void UpdateFieldRecipeSelection()
+        {
+            SetSelected(_fieldNoneButton, _fieldRecipe == FieldRecipe.None);
+            SetSelected(_fieldPulseButton, _fieldRecipe == FieldRecipe.Pulse);
+            SetSelected(
+                _fieldDirectionalButton,
+                _fieldRecipe == FieldRecipe.Directional);
+            SetSelected(
+                _fieldCombinedButton,
+                _fieldRecipe == FieldRecipe.PulseAndDirectional);
+        }
+
+        private void UpdateDebugViewSelection()
+        {
+            SetSelected(_litButton, _debugView == DebugView.Lit);
+            SetSelected(
+                _distanceButton,
+                _debugView == DebugView.GraphDistance);
+            SetSelected(_curvatureButton, _debugView == DebugView.Curvature);
+        }
+
+        private static void SetSelected(Button button, bool selected)
+        {
+            if (selected)
+                button.AddToClassList("choice-selected");
+            else
+                button.RemoveFromClassList("choice-selected");
         }
 
         private void UpdateDebugAttribute()

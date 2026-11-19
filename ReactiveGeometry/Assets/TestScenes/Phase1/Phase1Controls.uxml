@@ -15,7 +15,7 @@
                         <ui:Label class="slider-label" text="Frequency" />
                         <ui:Label name="frequencyValue" class="slider-value" text="4" />
                     </ui:VisualElement>
-                    <ui:SliderInt name="frequencySlider" class="control-slider" low-value="1" high-value="16" value="4" />
+                    <ui:SliderInt name="frequencySlider" class="control-slider" low-value="1" high-value="64" value="4" />
                 </ui:VisualElement>
                 <ui:VisualElement class="slider-field">
                     <ui:VisualElement class="slider-heading">

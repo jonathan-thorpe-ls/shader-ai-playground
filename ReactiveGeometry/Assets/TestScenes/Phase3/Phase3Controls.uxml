@@ -8,13 +8,14 @@
                 <ui:Label name="sceneTitle" class="scene-title" text="Graph fields" />
                 <ui:Label name="sceneSubtitle" class="scene-subtitle" />
             </ui:VisualElement>
-            <ui:Label name="diagnostics" class="diagnostics" text="Waiting for field state..." />
-            <ui:VisualElement class="control-section">
+            <ui:ScrollView class="control-scroll">
+                <ui:Label name="diagnostics" class="diagnostics" text="Waiting for field state..." />
+                <ui:VisualElement class="control-section">
                 <ui:Label class="section-title" text="MESH DENSITY" />
-                <ui:SliderInt name="densitySlider" class="control-slider" low-value="1" high-value="16" value="4" />
+                <ui:SliderInt name="densitySlider" class="control-slider" low-value="1" high-value="64" value="4" />
                 <ui:Label class="control-caption" text="Icosphere generation frequency" />
-            </ui:VisualElement>
-            <ui:VisualElement class="control-section">
+                </ui:VisualElement>
+                <ui:VisualElement class="control-section">
                 <ui:Label class="section-title" text="GRAPH SOURCE" />
                 <ui:VisualElement class="slider-heading">
                     <ui:Label class="slider-label" text="Source vertex" />
@@ -24,34 +25,45 @@
                     <ui:Button name="applyButton" class="action-button primary-button" text="Apply recipe" />
                     <ui:Button name="inspectButton" class="action-button" text="Inspect" />
                 </ui:VisualElement>
-            </ui:VisualElement>
-            <ui:VisualElement class="control-section">
-                <ui:Label class="section-title" text="FIELDS" />
-                <ui:Toggle name="pulseToggle" class="phase-toggle" text="Graph pulse" />
-                <ui:Slider name="amplitudeSlider" class="control-slider" low-value="0" high-value="60" value="24" />
-                <ui:Label class="control-caption" text="Pulse amplitude" />
-                <ui:Slider name="widthSlider" class="control-slider" low-value="0.04" high-value="0.5" value="0.16" />
-                <ui:Label class="control-caption" text="Pulse width" />
-                <ui:Slider name="pulseRateSlider" class="control-slider" low-value="0.1" high-value="2" value="0.65" />
-                <ui:Label class="control-caption" text="Pulse rate" />
-                <ui:Toggle name="directionalToggle" class="phase-toggle" text="Directional force" />
-            </ui:VisualElement>
-            <ui:VisualElement class="control-section">
-                <ui:Label class="section-title" text="DEBUG VIEW" />
-                <ui:VisualElement name="debugViewButtons" class="button-row">
-                    <ui:Button name="litButton" class="action-button debug-view-button" text="Lit" />
-                    <ui:Button name="distanceButton" class="action-button debug-view-button" text="Distance" />
-                    <ui:Button name="curvatureButton" class="action-button debug-view-button" text="Curvature" />
                 </ui:VisualElement>
-                <ui:Toggle name="wireframeToggle" class="phase-toggle" text="Rest topology overlay" />
-                <ui:Toggle name="verticesToggle" class="phase-toggle" text="Vertex markers" />
-                <ui:Toggle name="normalsToggle" class="phase-toggle" text="Rest normal glyphs" />
-            </ui:VisualElement>
-            <ui:VisualElement class="button-row">
-                <ui:Button name="pauseButton" class="action-button" text="" />
-                <ui:Button name="resetButton" class="action-button" text="Reset" />
-            </ui:VisualElement>
-            <ui:Label name="inspection" class="inspection" text="Apply a recipe, then inspect its source." />
+                <ui:VisualElement class="control-section">
+                    <ui:Label class="section-title" text="FIELDS" />
+                    <ui:Label class="selector-label" text="Field recipe" />
+                    <ui:VisualElement class="choice-grid">
+                        <ui:Button name="fieldNoneButton" class="choice-button" text="None" />
+                        <ui:Button name="fieldPulseButton" class="choice-button" text="Pulse" />
+                        <ui:Button name="fieldDirectionalButton" class="choice-button" text="Directional" />
+                        <ui:Button name="fieldCombinedButton" class="choice-button" text="Pulse + directional" />
+                    </ui:VisualElement>
+                    <ui:Label class="control-caption" text="Choose the active forces, then apply the recipe." />
+                    <ui:Label class="slider-label" text="Pulse amplitude" />
+                    <ui:Slider name="amplitudeSlider" class="control-slider" low-value="0" high-value="60" value="24" />
+                    <ui:Label class="slider-label" text="Pulse width" />
+                    <ui:Slider name="widthSlider" class="control-slider" low-value="0.04" high-value="0.5" value="0.16" />
+                    <ui:Label class="slider-label" text="Pulse rate" />
+                    <ui:Slider name="pulseRateSlider" class="control-slider" low-value="0.1" high-value="2" value="0.65" />
+                    <ui:Label class="slider-label" text="Directional strength" />
+                    <ui:Slider name="directionalStrengthSlider" class="control-slider" low-value="0" high-value="20" value="2" />
+                </ui:VisualElement>
+                <ui:VisualElement class="control-section">
+                    <ui:Label class="section-title" text="DEBUG VIEW" />
+                    <ui:Label class="selector-label" text="Mesh display" />
+                    <ui:VisualElement class="choice-row">
+                        <ui:Button name="litButton" class="choice-button" text="Lit" />
+                        <ui:Button name="distanceButton" class="choice-button" text="Distance" />
+                        <ui:Button name="curvatureButton" class="choice-button" text="Curvature" />
+                    </ui:VisualElement>
+                    <ui:Label class="control-caption" text="Overlays below are independent of the mesh display." />
+                    <ui:Toggle name="wireframeToggle" class="phase-toggle" text="Show rest topology" />
+                    <ui:Toggle name="verticesToggle" class="phase-toggle" text="Show vertex markers" />
+                    <ui:Toggle name="normalsToggle" class="phase-toggle" text="Show rest normals" />
+                </ui:VisualElement>
+                <ui:VisualElement class="button-row">
+                    <ui:Button name="pauseButton" class="action-button" text="" />
+                    <ui:Button name="resetButton" class="action-button" text="Reset" />
+                </ui:VisualElement>
+                <ui:Label name="inspection" class="inspection" text="Apply a recipe, then inspect its source." />
+            </ui:ScrollView>
         </ui:VisualElement>
     </ui:VisualElement>
 </ui:UXML>

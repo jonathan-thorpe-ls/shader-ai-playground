@@ -16,6 +16,12 @@ Where source stubs overlap or propose incompatible layouts, this document is aut
 
 Build a reusable, GPU-resident framework for generating procedural structures, simulating their connected elements, and rendering or interacting with them in real time.
 
+This is a **performance-focused real-time system across the entire project**.
+Generation, simulation, deformation, interaction and rendering are designed for
+interactive frame budgets, bounded GPU work and predictable memory, rather than
+offline accuracy or visual-only demonstration. Performance is an architectural
+requirement from Phase 1 onward, not a later polishing task.
+
 Each generated structure is more than a mesh. It is a **self-describing procedural structure** containing:
 
 - geometry and rendering primitives;
@@ -65,6 +71,15 @@ Geometry generation, simulation, audio analysis, interaction, and rendering rema
 8. **Simulation is composable.** Structural springs, shear, bending, wave propagation, constraints and external fields are independent contributions.
 9. **Determinism is defined narrowly.** Integer/topology output should match on the same tested GPU/API; floating-point output uses documented tolerances.
 10. **Correctness precedes scale.** Establish validation and stability before increasing topology complexity or vertex count.
+11. **Real-time cost is part of correctness.** Features define supported size
+    presets and must remain within documented frame, dispatch, memory and
+    allocation budgets.
+12. **GPU work and state are bounded.** Runtime paths avoid per-frame CPU/GPU
+    vertex readback, topology rebuilding, unbounded allocations and
+    unconstrained iteration.
+13. **Measure before changing representation.** Storage, buffering and
+    shader-algorithm changes require representative profiling across supported
+    small, medium and large cases.
 
 ## 4. System architecture
 
@@ -293,7 +308,7 @@ Completed in Phase 1.
 
 ### 8.2 Parametric surfaces
 
-Implement first after the simulation foundation.
+Implement in Phase 4, after the simulation foundation.
 
 Support:
 
@@ -303,6 +318,8 @@ Support:
 - twist;
 - cylinder;
 - torus.
+- Möbius strip;
+- tube surfaces around lines, helices, tori, torus knots and Lissajous curves.
 
 Provide `u/v` coordinates, wrapped topology, optional diagonal/shear edges, analytic normals/tangents, primitive region IDs and boundary attributes.
 
@@ -313,6 +330,7 @@ Generate rings along analytic or sampled curves:
 - line;
 - helix;
 - torus knot;
+- configurable `(p, q)` torus knots including a trefoil preset;
 - Lissajous;
 - Catmull-Rom control-point curve.
 
@@ -553,6 +571,18 @@ Record:
 
 Profile representative small, medium and large cases before changing storage layout.
 
+For every phase, define the hardware/API context, real-time frame budget and
+supported topology presets before scale claims are accepted. Record CPU frame
+cost, GPU work where available, dispatch count, buffer sizes, allocation churn,
+substep count and dropped simulation time. Regression is measured against the
+same representative scenes and presets.
+
+Performance work is not deferred until Phase 8. Phase 8 consolidates
+cross-backend baselines, tooling and final polish; each earlier phase must prove
+that its new runtime path is viable at real time. Quality controls that add
+work must be bounded, preset-based or LOD-aware rather than allowing unchecked
+cost growth.
+
 ## 14. Next development phases
 
 Phase 1 is complete: the project has GPU icosphere generation, deterministic triangle topology, metadata foundations, validation, lifecycle checks and URP mesh-bridge rendering.
@@ -591,19 +621,34 @@ The core Phase 3 implementation is now present: dynamic attributes and operators
 distance, composable graph/directional fields, GPU attribute colourisation, topology/glyph
 debug overlays, explicit inspection, and three UI Toolkit test scenes.
 
-### Phase 4 — Audio reactivity
+### Phase 4 — Surface generators and dynamic deformation
 
-Add FFT/RMS/onset analysis, compact smoothed GPU parameters, and configurable audio mappings. Prove distinct bass, mid, high and onset responses while preserving simulation stability.
+Extend the canonical generator contract beyond the icosphere and add spatially
+parameterised deformation sources:
 
-### Phase 5 — Additional surface generators
+- parametric grids and analytic shapes;
+- closed and open cylinder/torus topology;
+- rotation-minimising tube surfaces, including configurable torus knots;
+- generic simplex and Voronoi deformation fields with temporal variation;
+- transform-based spatial centres and configurable falloff;
+- bounded one-shot impulses and radial waves driven from scene objects.
 
-Extend the shared architecture to parametric surfaces, followed by tubes:
+Completion means the new generators pass the same topology, simulation, normal,
+rendering and metadata tests as the icosphere. Phase 4 is a performance-focused
+real-time system: supported presets must operate within documented frame,
+dispatch, memory and allocation budgets. Scene objects expose movable
+deformation centres through Scene view gizmos and expose parameters and event
+triggers through simple, functional UI Toolkit component inspectors. The test
+scenes do not require elaborate runtime control panels.
 
-1. parametric grid and shapes;
-2. wrapped cylinder/torus topology;
-3. rotation-minimising tube frames, caps and longitudinal metadata.
+See the detailed implementation plan in
+[Phase4-SurfaceGeneratorsDynamicDeformation.md](Implementation/Phase4-SurfaceGeneratorsDynamicDeformation.md).
 
-Completion means every new generator passes shared topology, simulation, normal, rendering and metadata tests.
+### Phase 5 — Audio reactivity
+
+Add FFT/RMS/onset analysis, compact smoothed GPU parameters, and configurable
+audio mappings. Prove distinct bass, mid, high and onset responses across both
+the icosphere and Phase 4 surfaces while preserving simulation stability.
 
 ### Phase 6 — Graph and irregular generators
 
@@ -635,9 +680,9 @@ Phase 2: Stable neighbour simulation
     |
 Phase 3: Metadata operators, fields and debug tools
     |
-Phase 4: Audio control
+Phase 4: Surface generators and dynamic deformation
     |
-Phase 5: Parametric surfaces and tubes
+Phase 5: Audio control
     |
 Phase 6: Graphs, particles and Voronoi
     |
@@ -667,7 +712,11 @@ A phase is complete only when:
 6. the relevant scene or sample demonstrates the result;
 7. console errors, shader errors and diagnostics are clean;
 8. limitations, data formats and settings are documented;
-9. performance is measured for the sizes claimed as supported.
+9. performance is measured for the sizes claimed as supported;
+10. supported presets remain within the phase's documented real-time frame,
+    dispatch, memory and allocation budgets;
+11. runtime generation, deformation and simulation paths do not perform
+    per-frame GPU-to-CPU vertex readback or unconstrained allocation.
 
 ## 17. Source design decisions retained
 
@@ -680,4 +729,6 @@ The consolidated direction retains these key ideas from all non-empty stubs:
 - generators are added only after the preceding shared contract is stable;
 - VR operates through interaction sources, fields and geometry response profiles;
 - provider-independent XR abstractions keep gesture and geometry concerns separate;
+- performance remains a first-class requirement for every phase, from the
+  initial representation through interaction and audio features;
 - debugging and validation are first-class because GPU state is otherwise difficult to inspect.

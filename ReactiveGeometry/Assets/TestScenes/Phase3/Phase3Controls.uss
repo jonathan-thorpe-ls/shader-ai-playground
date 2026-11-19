@@ -1,43 +1,117 @@
 .phase3-panel {
     max-height: 95%;
+    flex-shrink: 0;
+}
+
+.control-scroll {
+    flex-grow: 1;
+    margin-top: 4px;
+}
+
+.control-scroll .control-section,
+.control-scroll .diagnostics,
+.control-scroll .inspection,
+.control-scroll .button-row {
+    flex-shrink: 0;
 }
 
 .phase-toggle {
-    min-height: 26px;
-    margin-bottom: 3px;
+    min-height: 32px;
+    margin-bottom: 5px;
+    padding: 4px 7px;
     color: var(--text);
     font-size: 12px;
+    background-color: rgba(28, 43, 58, 0.65);
+    border-width: 1px;
+    border-color: var(--line);
+    border-radius: 5px;
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.phase-toggle .unity-toggle__input {
+    flex-grow: 1;
+    flex-direction: row;
+    align-items: center;
+    margin-right: 8px;
 }
 
 .phase-toggle .unity-toggle__checkmark {
+    width: 20px;
+    height: 20px;
     background-color: var(--track);
-    border-width: 1px;
-    border-color: var(--line);
+    border-width: 2px;
+    border-color: rgb(108, 132, 150);
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.phase-toggle .unity-toggle__text {
+    color: var(--text);
+    -unity-font-style: bold;
+    -unity-text-align: middle-left;
+    white-space: normal;
+}
+
+.phase-toggle:hover {
+    border-color: var(--accent);
 }
 
 .phase-toggle:checked .unity-toggle__checkmark {
     background-color: var(--accent);
-    -unity-background-image-tint-color: rgb(4, 20, 27);
+    border-color: var(--accent-hover);
 }
 
-.phase-dropdown {
-    margin-bottom: 8px;
-    color: var(--text);
-    background-color: var(--track);
-    border-width: 1px;
-    border-color: var(--line);
-    border-radius: 4px;
+.phase-toggle:checked {
+    border-color: var(--accent);
+    background-color: rgba(28, 80, 101, 0.72);
 }
 
-.debug-view-button {
-    background-color: var(--track);
-    border-width: 1px;
-    border-color: var(--line);
+.selector-label {
+    margin-bottom: 5px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.choice-grid,
+.choice-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-right: -5px;
+    margin-bottom: 3px;
+    flex-shrink: 0;
+}
+
+.choice-button {
     flex-grow: 1;
+    min-width: 44%;
+    min-height: 32px;
+    margin-right: 5px;
+    margin-bottom: 5px;
+    padding: 5px 8px;
+    color: var(--text);
+    background-color: var(--track);
+    border-width: 1px;
+    border-color: var(--line);
+    border-radius: 5px;
+    -unity-font-style: bold;
+    white-space: normal;
 }
 
-.phase-dropdown .unity-base-popup-field__text {
-    color: var(--text);
+.choice-row > .choice-button {
+    min-width: 0;
+    max-width: none;
+}
+
+.choice-button:hover {
+    border-color: var(--accent);
+}
+
+.choice-button.choice-selected {
+    color: rgb(4, 20, 27);
+    background-color: var(--accent);
+    border-color: var(--accent-hover);
 }
 
 .control-caption {
