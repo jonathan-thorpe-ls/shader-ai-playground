@@ -1,0 +1,83 @@
+#pragma kernel InitializeDistance
+#pragma kernel ExpandDistance
+#pragma kernel ClearMaximum
+#pragma kernel ReduceDistance
+#pragma kernel PublishDistance
+
+StructuredBuffer<uint> _Sources;
+StructuredBuffer<uint> _DistanceRead;
+RWStructuredBuffer<uint> _DistanceWrite;
+StructuredBuffer<uint> _NeighbourOffsets;
+StructuredBuffer<uint> _Neighbours;
+RWStructuredBuffer<uint> _MaximumDistance;
+RWStructuredBuffer<float> _GraphDistance;
+RWStructuredBuffer<float> _GraphDistance01;
+
+uint _VertexCount;
+uint _SourceCount;
+static const uint UNREACHABLE = 0xffffffffu;
+
+[numthreads(64, 1, 1)]
+void InitializeDistance(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+    uint distance = UNREACHABLE;
+    for (uint source = 0; source < _SourceCount; source++)
+    {
+        if (_Sources[source] == vertex)
+            distance = 0;
+    }
+    _DistanceWrite[vertex] = distance;
+}
+
+[numthreads(64, 1, 1)]
+void ExpandDistance(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+    uint best = _DistanceRead[vertex];
+    for (uint slot = _NeighbourOffsets[vertex];
+         slot < _NeighbourOffsets[vertex + 1];
+         slot++)
+    {
+        uint neighbourDistance = _DistanceRead[_Neighbours[slot]];
+        if (neighbourDistance != UNREACHABLE)
+            best = min(best, neighbourDistance + 1);
+    }
+    _DistanceWrite[vertex] = best;
+}
+
+[numthreads(1, 1, 1)]
+void ClearMaximum(uint3 id : SV_DispatchThreadID)
+{
+    _MaximumDistance[0] = 0;
+}
+
+[numthreads(64, 1, 1)]
+void ReduceDistance(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+    uint raw = _DistanceRead[vertex];
+    InterlockedMax(
+        _MaximumDistance[0],
+        raw == UNREACHABLE ? 0 : raw);
+}
+
+[numthreads(64, 1, 1)]
+void PublishDistance(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+    uint raw = _DistanceRead[vertex];
+    uint maximum = max(_MaximumDistance[0], 1u);
+    float distance = raw == UNREACHABLE ? 0.0 : (float)raw;
+    _GraphDistance[vertex] = distance;
+    _GraphDistance01[vertex] =
+        raw == UNREACHABLE ? 0.0 : distance / (float)maximum;
+}

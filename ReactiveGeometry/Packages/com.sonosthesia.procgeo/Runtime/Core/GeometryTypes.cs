@@ -83,6 +83,9 @@ namespace Sonosthesia.ProcGeo
         public static readonly AttributeId NeighbourCount = new("NeighbourCount");
         public static readonly AttributeId Curvature = new("Curvature");
         public static readonly AttributeId EdgeRestLength = new("EdgeRestLength");
+        public static readonly AttributeId GraphDistance = new("GraphDistance");
+        public static readonly AttributeId GraphDistance01 = new("GraphDistance01");
+        public static readonly AttributeId DeformationWeight = new("DeformationWeight");
     }
 
     public sealed class AttributeDescriptor

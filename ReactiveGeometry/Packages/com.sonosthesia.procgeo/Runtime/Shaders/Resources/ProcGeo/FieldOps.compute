@@ -1,0 +1,54 @@
+#pragma kernel ClearForces
+#pragma kernel AddContribution
+#pragma kernel GraphPulse
+#pragma kernel DirectionalForce
+
+RWStructuredBuffer<float3> _ForceBuffer;
+StructuredBuffer<float3> _Contribution;
+RWStructuredBuffer<float3> _Combined;
+StructuredBuffer<float> _GraphDistance01;
+StructuredBuffer<float3> _RestNormals;
+
+uint _VertexCount;
+float _PulsePhase;
+float _PulseAmplitude;
+float _PulseWidth;
+float _DirectionalStrength;
+float _FieldWeight;
+float3 _FieldDirection;
+
+[numthreads(64, 1, 1)]
+void ClearForces(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _VertexCount)
+        _ForceBuffer[id.x] = 0;
+}
+
+[numthreads(64, 1, 1)]
+void AddContribution(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _VertexCount)
+        _Combined[id.x] += _Contribution[id.x];
+}
+
+[numthreads(64, 1, 1)]
+void GraphPulse(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+    float delta = (_GraphDistance01[vertex] - _PulsePhase) / max(_PulseWidth, 1e-4);
+    float falloff = exp(-delta * delta);
+    _ForceBuffer[vertex] =
+        _RestNormals[vertex] * (_PulseAmplitude * falloff * _FieldWeight);
+}
+
+[numthreads(64, 1, 1)]
+void DirectionalForce(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _VertexCount)
+    {
+        _ForceBuffer[id.x] =
+            _FieldDirection * _DirectionalStrength * _FieldWeight;
+    }
+}

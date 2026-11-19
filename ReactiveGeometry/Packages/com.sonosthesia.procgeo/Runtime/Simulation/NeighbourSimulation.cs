@@ -86,6 +86,9 @@ namespace Sonosthesia.ProcGeo
                     _shader, _initializeKernel, "_PreviousPositions",
                     _resource.Live.PreviousPositions);
                 command.SetComputeBufferParam(
+                    _shader, _initializeKernel, "_ExternalForces",
+                    _resource.Live.Simulation.ExternalForces);
+                command.SetComputeBufferParam(
                     _shader, _initializeKernel, "_SimulationStatus",
                     _resource.Live.Simulation.Status);
                 command.DispatchCompute(
@@ -176,6 +179,9 @@ namespace Sonosthesia.ProcGeo
                 command.SetComputeBufferParam(
                     _shader, _integrateKernel, "_WriteVelocities",
                     _resource.Live.Simulation.Velocity(write));
+                command.SetComputeBufferParam(
+                    _shader, _integrateKernel, "_ExternalForces",
+                    _resource.Live.Simulation.ExternalForces);
                 command.SetComputeBufferParam(
                     _shader, _integrateKernel, "_SimulationStatus",
                     _resource.Live.Simulation.Status);

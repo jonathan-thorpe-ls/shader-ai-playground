@@ -15,6 +15,33 @@ Implementation plan for the third phase of the GPU procedural-geometry framework
 
 ---
 
+## Implementation status
+
+The Phase 3 vertical slice is implemented in `ReactiveGeometry/`:
+
+- dynamic recipe-owned attributes with exact domain/format validation and buffer reuse;
+- fill, remap, combine, graph-distance and graph-distance normalisation operators;
+- reusable graph-pulse and directional force fields;
+- deterministic external-force accumulation into the Phase 2 solver;
+- GPU attribute colourisation;
+- rest wireframe, vertex and normal debug overlays;
+- explicit picking/inspection with curvature, boundary, graph-distance and GPU ownership data;
+- three UI Toolkit-only Phase 3 scenes;
+- EditMode operator/field tests and PlayMode rendering/lifecycle tests.
+
+Current deliberate implementation limits:
+
+- graph distance uses bounded full-graph relaxation dispatches rather than a compacted
+  frontier; supported scene sizes are documented by the Phase 3 profiles before this is
+  changed to a frontier implementation;
+- picking reads explicit one-off snapshots after a user selection; it is not a per-frame
+  GPU picker;
+- debug topology snapshots are regenerated when the relevant overlay is enabled and are
+  not updated every simulation frame;
+- GPU timing and cross-backend baselines remain hardening data for Phase 8.
+
+---
+
 ## 1. Purpose
 
 Phase 2 established a stable, GPU-resident neighbour simulation. Phase 3 makes that simulation configurable through geometry metadata instead of geometry-specific solver code.

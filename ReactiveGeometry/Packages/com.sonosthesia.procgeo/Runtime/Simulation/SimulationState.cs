@@ -8,6 +8,7 @@ namespace Sonosthesia.ProcGeo
     {
         private GraphicsBuffer[] _positions;
         private GraphicsBuffer[] _velocities;
+        private GraphicsBuffer _externalForces;
         private GraphicsBuffer _status;
         private bool _disposed;
 
@@ -33,10 +34,16 @@ namespace Sonosthesia.ProcGeo
                 owner,
                 6,
                 sizeof(uint));
+            _externalForces = Create(
+                $"{layout.Name}.ExternalForces",
+                owner,
+                layout.VertexCount,
+                3 * sizeof(float));
         }
 
         public GraphicsBuffer Position(int index) => _positions[index];
         public GraphicsBuffer Velocity(int index) => _velocities[index];
+        public GraphicsBuffer ExternalForces => _externalForces;
         public GraphicsBuffer Status => _status;
 
         public SimulationStatus ReadStatus()
@@ -55,6 +62,7 @@ namespace Sonosthesia.ProcGeo
                 GpuBufferRegistry.Release(ref _positions[index]);
                 GpuBufferRegistry.Release(ref _velocities[index]);
             }
+            GpuBufferRegistry.Release(ref _externalForces);
             GpuBufferRegistry.Release(ref _status);
         }
 

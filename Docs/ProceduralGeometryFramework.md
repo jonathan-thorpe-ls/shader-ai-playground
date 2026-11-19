@@ -587,6 +587,10 @@ Completion means a field can be configured from declared attributes and exercise
 
 See the detailed implementation plan in [Phase3-FieldsOperatorsDebugging.md](Implementation/Phase3-FieldsOperatorsDebugging.md), including operator recipes, GPU graph distance, field composition, debugging/picking, UI Toolkit test scenes, tests, and milestones.
 
+The core Phase 3 implementation is now present: dynamic attributes and operators, graph
+distance, composable graph/directional fields, GPU attribute colourisation, topology/glyph
+debug overlays, explicit inspection, and three UI Toolkit test scenes.
+
 ### Phase 4 — Audio reactivity
 
 Add FFT/RMS/onset analysis, compact smoothed GPU parameters, and configurable audio mappings. Prove distinct bass, mid, high and onset responses while preserving simulation stability.

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -14,13 +15,17 @@ namespace Sonosthesia.ProcGeo
         [SerializeField] private Color color = new(0.2f, 0.6f, 1f, 1f);
         [SerializeField] private bool simulationEnabled = true;
         [SerializeField] private SimulationParameters simulationParameters = SimulationParameters.Nominal;
+        [SerializeField] private GeometryFieldSettings fieldSettings = GeometryFieldSettings.Default;
 
         private GeometryResource _resource;
         private IcosphereGenerator _generator;
         private GeometryCommandScheduler _scheduler;
         private NeighbourSimulation _simulation;
+        private FieldAccumulator _fields;
+        private GraphDistanceOperator _graphDistance;
         private SimulationScheduler _simulationScheduler;
         private Material _material;
+        private Material _debugMaterial;
         private MeshFilter _filter;
         private MeshRenderer _renderer;
         private bool _pendingRegeneration;
@@ -36,6 +41,7 @@ namespace Sonosthesia.ProcGeo
         public NeighbourSimulation Simulation => _simulation;
         public SimulationParameters Parameters => _validatedParameters;
         public string ParameterWarning => _parameterWarning;
+        public GeometryFieldSettings FieldSettings => fieldSettings;
         public int LastSimulationStepCount => _simulationScheduler?.LastStepCount ?? 0;
         public float LastDroppedSimulationTime => _simulationScheduler?.LastDroppedTime ?? 0f;
         public bool SimulationEnabled
@@ -97,6 +103,22 @@ namespace Sonosthesia.ProcGeo
             if (!Application.isPlaying || !simulationEnabled || _simulation == null)
                 return;
 
+            if (_fields != null)
+            {
+                _fields.Record(new FieldParameters
+                {
+                    phase = Mathf.Repeat(
+                        Time.time * fieldSettings.pulseFrequency, 1f),
+                    pulseAmplitude = fieldSettings.pulseAmplitude,
+                    pulseWidth = fieldSettings.pulseWidth,
+                    directionalStrength = fieldSettings.directionalStrength,
+                    direction = transform.InverseTransformDirection(
+                        fieldSettings.directionalDirection.normalized),
+                    pulseWeight = fieldSettings.pulseWeight,
+                    directionalWeight = fieldSettings.directionalWeight
+                });
+            }
+
             int steps = _simulationScheduler.Accumulate(Time.deltaTime, _validatedParameters);
             if (steps == 0) return;
 
@@ -148,6 +170,7 @@ namespace Sonosthesia.ProcGeo
                 {
                     _simulation = new NeighbourSimulation(_resource);
                     _simulationScheduler = new SimulationScheduler();
+                    RebuildFields();
                     _resource.MarkUpdated(ExpandedBounds());
                 }
 
@@ -176,6 +199,48 @@ namespace Sonosthesia.ProcGeo
         {
             simulationParameters = parameters;
             ValidateSimulationParameters();
+        }
+
+        public void SetFieldSettings(GeometryFieldSettings settings)
+        {
+            fieldSettings = settings;
+            if (_resource != null && simulationEnabled)
+                RebuildFields();
+        }
+
+        public void SetDebugAttribute(AttributeId attribute, float minimum, float maximum)
+        {
+            if (_resource == null)
+                throw new InvalidOperationException("Geometry has not been generated.");
+            AttributeSet.Entry entry = _resource.Attributes.Require(attribute);
+            if (entry.Descriptor.Domain != AttributeDomain.Vertex ||
+                entry.Descriptor.Format != AttributeFormat.Float)
+            {
+                throw new InvalidOperationException(
+                    $"Debug attribute '{attribute}' must be a vertex scalar.");
+            }
+            if (_debugMaterial == null)
+            {
+                Shader shader = Shader.Find("Sonosthesia/ProcGeo/AttributeDebug")
+                    ?? throw new InvalidOperationException(
+                        "Sonosthesia/ProcGeo/AttributeDebug shader was not found.");
+                _debugMaterial = new Material(shader)
+                {
+                    name = $"{name} Attribute Debug",
+                    hideFlags = HideFlags.DontSave
+                };
+            }
+            _debugMaterial.SetBuffer("_DebugAttribute", entry.Buffer);
+            _debugMaterial.SetFloat("_DebugMinimum", minimum);
+            _debugMaterial.SetFloat(
+                "_DebugRange", Mathf.Max(maximum - minimum, 0.0001f));
+            _renderer.sharedMaterial = _debugMaterial;
+        }
+
+        public void ShowLitMaterial()
+        {
+            if (_renderer != null && _material != null)
+                _renderer.sharedMaterial = _material;
         }
 
         public void ApplyImpulse(int vertex, Vector3 direction, float magnitude)
@@ -241,10 +306,43 @@ namespace Sonosthesia.ProcGeo
             _simulation?.Dispose();
             _simulation = null;
             _simulationScheduler = null;
+            _fields?.Dispose();
+            _fields = null;
+            _graphDistance?.Dispose();
+            _graphDistance = null;
             _generator?.Dispose();
             _generator = null;
             _resource?.Dispose();
             _resource = null;
+            if (_debugMaterial != null)
+            {
+                DestroyOwned(_debugMaterial);
+                _debugMaterial = null;
+            }
+        }
+
+        private void RebuildFields()
+        {
+            _fields?.Dispose();
+            _fields = null;
+            _graphDistance?.Dispose();
+            _graphDistance = null;
+            if (!fieldSettings.fieldsEnabled || !simulationEnabled || _resource == null)
+            {
+                return;
+            }
+
+            fieldSettings.graphSourceVertex = Mathf.Clamp(
+                fieldSettings.graphSourceVertex, 0, _resource.Layout.VertexCount - 1);
+            _graphDistance = new GraphDistanceOperator(
+                new[] { fieldSettings.graphSourceVertex });
+            _graphDistance.Execute(_resource);
+            List<IGeometryField> fields = new();
+            if (fieldSettings.pulseEnabled)
+                fields.Add(new GraphPulseField());
+            if (fieldSettings.directionalEnabled)
+                fields.Add(new DirectionalField());
+            _fields = new FieldAccumulator(_resource, fields);
         }
 
         private static void DestroyOwned(UnityEngine.Object target)

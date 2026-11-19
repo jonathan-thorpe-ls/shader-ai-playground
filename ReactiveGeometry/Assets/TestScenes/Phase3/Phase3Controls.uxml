@@ -1,0 +1,48 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:Style src="../TestSceneUi.uss" />
+    <ui:Style src="Phase3Controls.uss" />
+    <ui:VisualElement name="root" class="test-scene-shell">
+        <ui:VisualElement name="panel" class="control-panel phase3-panel">
+            <ui:VisualElement class="panel-header">
+                <ui:Label class="eyebrow" text="PHASE 3 / FIELDS + DEBUGGING" />
+                <ui:Label name="sceneTitle" class="scene-title" text="Graph fields" />
+                <ui:Label name="sceneSubtitle" class="scene-subtitle" />
+            </ui:VisualElement>
+            <ui:Label name="diagnostics" class="diagnostics" text="Waiting for field state..." />
+            <ui:VisualElement class="control-section">
+                <ui:Label class="section-title" text="GRAPH SOURCE" />
+                <ui:VisualElement class="slider-heading">
+                    <ui:Label class="slider-label" text="Source vertex" />
+                </ui:VisualElement>
+                <ui:SliderInt name="sourceSlider" class="control-slider" low-value="0" high-value="160" value="0" />
+                <ui:VisualElement class="button-row">
+                    <ui:Button name="applyButton" class="action-button primary-button" text="Apply recipe" />
+                    <ui:Button name="inspectButton" class="action-button" text="Inspect" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:VisualElement class="control-section">
+                <ui:Label class="section-title" text="FIELDS" />
+                <ui:Toggle name="pulseToggle" class="phase-toggle" text="Graph pulse" />
+                <ui:Slider name="amplitudeSlider" class="control-slider" low-value="0" high-value="60" value="24" />
+                <ui:Label class="control-caption" text="Pulse amplitude" />
+                <ui:Slider name="widthSlider" class="control-slider" low-value="0.04" high-value="0.5" value="0.16" />
+                <ui:Label class="control-caption" text="Pulse width" />
+                <ui:Slider name="frequencySlider" class="control-slider" low-value="0.1" high-value="2" value="0.65" />
+                <ui:Label class="control-caption" text="Pulse frequency" />
+                <ui:Toggle name="directionalToggle" class="phase-toggle" text="Directional force" />
+            </ui:VisualElement>
+            <ui:VisualElement class="control-section">
+                <ui:Label class="section-title" text="DEBUG VIEW" />
+                <ui:DropdownField name="debugAttribute" class="phase-dropdown" choices="Lit,Graph distance,Curvature" index="1" />
+                <ui:Toggle name="wireframeToggle" class="phase-toggle" text="Rest topology overlay" />
+                <ui:Toggle name="verticesToggle" class="phase-toggle" text="Vertex markers" />
+                <ui:Toggle name="normalsToggle" class="phase-toggle" text="Rest normal glyphs" />
+            </ui:VisualElement>
+            <ui:VisualElement class="button-row">
+                <ui:Button name="pauseButton" class="action-button" text="" />
+                <ui:Button name="resetButton" class="action-button" text="Reset" />
+            </ui:VisualElement>
+            <ui:Label name="inspection" class="inspection" text="Apply a recipe, then inspect its source." />
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

@@ -1,0 +1,75 @@
+#pragma kernel Fill
+#pragma kernel Remap
+#pragma kernel CombineAdd
+#pragma kernel CombineMultiply
+#pragma kernel CombineMin
+#pragma kernel CombineMax
+
+StructuredBuffer<float> _InputA;
+StructuredBuffer<float> _InputB;
+RWStructuredBuffer<float> _Output;
+
+uint _ElementCount;
+float _Value;
+float _InputMinimum;
+float _InputMaximum;
+float _OutputMinimum;
+float _OutputMaximum;
+float _FirstWeight;
+float _SecondWeight;
+
+[numthreads(64, 1, 1)]
+void Fill(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _ElementCount)
+        _Output[id.x] = isfinite(_Value) ? _Value : 0.0;
+}
+
+[numthreads(64, 1, 1)]
+void Remap(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x >= _ElementCount)
+        return;
+    float value = _InputA[id.x];
+    float denominator = _InputMaximum - _InputMinimum;
+    float t = isfinite(value) && abs(denominator) > 1e-7
+        ? saturate((value - _InputMinimum) / denominator)
+        : 0.0;
+    _Output[id.x] = lerp(_OutputMinimum, _OutputMaximum, t);
+}
+
+[numthreads(64, 1, 1)]
+void CombineAdd(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _ElementCount)
+        _Output[id.x] =
+            _InputA[id.x] * _FirstWeight +
+            _InputB[id.x] * _SecondWeight;
+}
+
+[numthreads(64, 1, 1)]
+void CombineMultiply(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _ElementCount)
+        _Output[id.x] =
+            _InputA[id.x] * _FirstWeight *
+            (_InputB[id.x] * _SecondWeight);
+}
+
+[numthreads(64, 1, 1)]
+void CombineMin(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _ElementCount)
+        _Output[id.x] = min(
+            _InputA[id.x] * _FirstWeight,
+            _InputB[id.x] * _SecondWeight);
+}
+
+[numthreads(64, 1, 1)]
+void CombineMax(uint3 id : SV_DispatchThreadID)
+{
+    if (id.x < _ElementCount)
+        _Output[id.x] = max(
+            _InputA[id.x] * _FirstWeight,
+            _InputB[id.x] * _SecondWeight);
+}

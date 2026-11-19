@@ -45,6 +45,37 @@ namespace Sonosthesia.ProcGeo
             return entry;
         }
 
+        public Entry RequireOrCreate(AttributeDescriptor descriptor)
+        {
+            if (descriptor == null) throw new ArgumentNullException(nameof(descriptor));
+            if (_entries.TryGetValue(descriptor.Id, out Entry existing))
+            {
+                AttributeDescriptor current = existing.Descriptor;
+                if (current.Domain != descriptor.Domain ||
+                    current.Format != descriptor.Format)
+                {
+                    throw new InvalidOperationException(
+                        $"Attribute '{descriptor.Id}' already exists with " +
+                        $"{current.Domain}/{current.Format}, not " +
+                        $"{descriptor.Domain}/{descriptor.Format}.");
+                }
+                return existing;
+            }
+
+            int count = Layout.AttributeCount(descriptor.Domain);
+            if (count <= 0)
+                throw new InvalidOperationException(
+                    $"Attribute '{descriptor.Id}' has no elements in domain {descriptor.Domain}.");
+            GraphicsBuffer buffer = new(
+                GraphicsBuffer.Target.Structured,
+                count,
+                descriptor.Stride);
+            GpuBufferRegistry.Register(buffer, $"{Layout.Name}.{descriptor.Id}", _owner);
+            Entry entry = new(descriptor, buffer);
+            _entries.Add(descriptor.Id, entry);
+            return entry;
+        }
+
         public void Bind(CommandBuffer command, AttributeId id, string shaderName)
         {
             command.SetGlobalBuffer(shaderName, Require(id).Buffer);

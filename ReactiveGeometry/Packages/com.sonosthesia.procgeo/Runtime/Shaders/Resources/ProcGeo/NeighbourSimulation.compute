@@ -11,6 +11,7 @@ StructuredBuffer<uint> _Neighbours;
 StructuredBuffer<uint> _NeighbourEdge;
 StructuredBuffer<float> _RestLengths;
 StructuredBuffer<uint> _EdgeTypes;
+RWStructuredBuffer<float3> _ExternalForces;
 StructuredBuffer<uint> _Indices;
 StructuredBuffer<uint> _VertexFaceOffsets;
 StructuredBuffer<uint> _VertexFaces;
@@ -54,6 +55,7 @@ void InitializeState(uint3 id : SV_DispatchThreadID)
         _VelocitiesA[vertex] = 0;
         _VelocitiesB[vertex] = 0;
         _PreviousPositions[vertex] = position;
+        _ExternalForces[vertex] = 0;
     }
     if (vertex < 6)
         _SimulationStatus[vertex] = 0;
@@ -119,6 +121,7 @@ void NeighbourIntegrate(uint3 id : SV_DispatchThreadID)
     }
 
     force += _RestoringStiffness * (restPosition - position);
+    force += _ExternalForces[vertex];
     force -= _Damping * velocity;
     float mass = max(abs(_Masses[vertex]), _Epsilon);
     float3 nextVelocity = velocity + (force / mass) * _DeltaTime;
