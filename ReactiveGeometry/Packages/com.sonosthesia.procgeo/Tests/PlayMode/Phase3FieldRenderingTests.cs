@@ -64,6 +64,25 @@ namespace Sonosthesia.ProcGeo.Tests
             Assert.That(GpuBufferRegistry.Count, Is.EqualTo(baseline));
         }
 
+        [UnityTest]
+        public IEnumerator Renderer_RegeneratesAtRuntimeDensityWithoutInvalidState()
+        {
+            Assume.That(SystemInfo.supportsComputeShaders);
+            GameObject gameObject = new("Runtime Density");
+            ProceduralMeshRenderer renderer =
+                gameObject.AddComponent<ProceduralMeshRenderer>();
+            yield return null;
+
+            renderer.SetIcosphereSettings(8, 1f);
+            yield return null;
+
+            Assert.That(renderer.Frequency, Is.EqualTo(8));
+            Assert.That(renderer.VertexCount, Is.EqualTo(642));
+            Assert.That(renderer.TriangleCount, Is.EqualTo(1280));
+            Assert.That(renderer.ReadSimulationStatus().InvalidValueCount, Is.Zero);
+            Object.Destroy(gameObject);
+        }
+
         private static bool IsFinite(Vector3 value) =>
             !float.IsNaN(value.x) && !float.IsInfinity(value.x) &&
             !float.IsNaN(value.y) && !float.IsInfinity(value.y) &&

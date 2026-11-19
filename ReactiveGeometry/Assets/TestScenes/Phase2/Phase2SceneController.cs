@@ -23,6 +23,8 @@ namespace Sonosthesia.ProcGeo
         private Label _sceneTitle;
         private Label _sceneSubtitle;
         private Button _pauseButton;
+        private SliderInt _density;
+        private Label _densityValue;
         private Slider _stiffness;
         private Slider _restoringStiffness;
         private Slider _damping;
@@ -100,12 +102,15 @@ namespace Sonosthesia.ProcGeo
             _sceneSubtitle = root.Q<Label>("sceneSubtitle");
             _diagnostics = root.Q<Label>("diagnostics");
             _pauseButton = root.Q<Button>("pauseButton");
+            _density = root.Q<SliderInt>("densitySlider");
+            _densityValue = root.Q<Label>("densityValue");
             _stiffness = root.Q<Slider>("stiffnessSlider");
             _restoringStiffness = root.Q<Slider>("restoringStiffnessSlider");
             _damping = root.Q<Slider>("dampingSlider");
 
             if (_sceneTitle == null || _sceneSubtitle == null || _diagnostics == null ||
-                _pauseButton == null || _stiffness == null || _restoringStiffness == null ||
+                _pauseButton == null || _density == null || _densityValue == null ||
+                _stiffness == null || _restoringStiffness == null ||
                 _damping == null)
             {
                 Debug.LogError("Phase 2 UI Toolkit document is missing required controls.", this);
@@ -115,6 +120,8 @@ namespace Sonosthesia.ProcGeo
 
             _sceneTitle.text = sceneTitle;
             _sceneSubtitle.text = sceneSubtitle;
+            _density.SetValueWithoutNotify(_renderer.Frequency);
+            _densityValue.text = _renderer.Frequency.ToString();
             _stiffness.SetValueWithoutNotify(_renderer.Parameters.stiffness);
             _restoringStiffness.SetValueWithoutNotify(_renderer.Parameters.restoringStiffness);
             _damping.SetValueWithoutNotify(_renderer.Parameters.damping);
@@ -122,12 +129,14 @@ namespace Sonosthesia.ProcGeo
             root.Q<Button>("resetButton").clicked += ResetSimulation;
             _pauseButton.clicked += TogglePause;
             root.Q<Button>("singleStepButton").clicked += SingleStep;
+            root.Q<Button>("regenerateButton").clicked += RegenerateMesh;
             root.Q<Button>("gentleButton").clicked += UseGentlePreset;
             root.Q<Button>("nominalButton").clicked += UseNominalPreset;
             root.Q<Button>("maximumButton").clicked += UseMaximumPreset;
             _stiffness.RegisterValueChangedCallback(SetStiffness);
             _restoringStiffness.RegisterValueChangedCallback(SetRestoringStiffness);
             _damping.RegisterValueChangedCallback(SetDamping);
+            _density.RegisterValueChangedCallback(SetDensityLabel);
             _bound = true;
             UpdatePauseButton();
             UpdateDiagnostics();
@@ -147,12 +156,14 @@ namespace Sonosthesia.ProcGeo
             root.Q<Button>("resetButton").clicked -= ResetSimulation;
             _pauseButton.clicked -= TogglePause;
             root.Q<Button>("singleStepButton").clicked -= SingleStep;
+            root.Q<Button>("regenerateButton").clicked -= RegenerateMesh;
             root.Q<Button>("gentleButton").clicked -= UseGentlePreset;
             root.Q<Button>("nominalButton").clicked -= UseNominalPreset;
             root.Q<Button>("maximumButton").clicked -= UseMaximumPreset;
             _stiffness.UnregisterValueChangedCallback(SetStiffness);
             _restoringStiffness.UnregisterValueChangedCallback(SetRestoringStiffness);
             _damping.UnregisterValueChangedCallback(SetDamping);
+            _density.UnregisterValueChangedCallback(SetDensityLabel);
             _bound = false;
         }
 
@@ -194,6 +205,20 @@ namespace Sonosthesia.ProcGeo
             _renderer.SetSimulationParameters(parameters);
         }
 
+        public void RegenerateMesh()
+        {
+            impulseVertex = Mathf.Clamp(
+                impulseVertex, 0, Mathf.Max(0, 10 * _density.value * _density.value + 1));
+            _renderer.SetIcosphereSettings(_density.value, _renderer.Radius);
+            ResetSimulation();
+            UpdateDiagnostics();
+        }
+
+        private void SetDensityLabel(ChangeEvent<int> change)
+        {
+            _densityValue.text = change.newValue.ToString();
+        }
+
         private void UpdatePauseButton()
         {
             if (_pauseButton != null)
@@ -205,6 +230,7 @@ namespace Sonosthesia.ProcGeo
             SimulationStatus status = _renderer.ReadSimulationStatus();
             _diagnostics.text =
                 $"Vertex {Mathf.Clamp(impulseVertex, 0, Mathf.Max(0, _renderer.VertexCount - 1))}  " +
+                $"Mesh {_renderer.VertexCount:N0}V/{_renderer.TriangleCount:N0}T  " +
                 $"Steps/frame {_renderer.LastSimulationStepCount}  " +
                 $"Dropped {(_renderer.LastDroppedSimulationTime * 1000f):F1} ms\n" +
                 $"Speed {status.MaximumSpeed:F2}  Displacement {status.MaximumDisplacement:F2}  " +

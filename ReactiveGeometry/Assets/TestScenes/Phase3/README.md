@@ -1,7 +1,8 @@
 # Phase 3 - Fields, Operators and Debugging
 
 The Phase 3 scenes demonstrate metadata operators, graph-derived deformation fields and
-one-off debug inspection. All runtime UI uses UI Toolkit.
+one-off debug inspection. All runtime UI uses UI Toolkit. Each scene exposes the icosphere
+generation frequency so mesh density can be changed at runtime.
 
 ## Scenes
 

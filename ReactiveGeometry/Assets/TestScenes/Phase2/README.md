@@ -5,7 +5,8 @@ This folder is the manual exploration area for the dynamic neighbour simulation 
 
 The scenes contain simulation-enabled procedural icospheres and a shared UI Toolkit operator
 panel. The panel provides impulse, reset, pause/resume, single-step, parameter sliders and
-gentle/nominal/maximum presets.
+gentle/nominal/maximum presets. Every scene also exposes generation frequency and a regenerate
+action so the mesh density can be changed without leaving Play mode.
 
 ## Scenes
 

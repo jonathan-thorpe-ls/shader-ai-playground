@@ -9,6 +9,15 @@
             </ui:VisualElement>
             <ui:Label name="diagnostics" class="diagnostics" text="Waiting for simulation..." />
             <ui:VisualElement class="control-section">
+                <ui:Label class="section-title" text="MESH DENSITY" />
+                <ui:VisualElement class="slider-heading">
+                    <ui:Label class="slider-label" text="Generation frequency" />
+                    <ui:Label name="densityValue" class="slider-value" text="4" />
+                </ui:VisualElement>
+                <ui:SliderInt name="densitySlider" class="control-slider" low-value="1" high-value="16" value="4" />
+                <ui:Button name="regenerateButton" class="action-button primary-button" text="Regenerate mesh" />
+            </ui:VisualElement>
+            <ui:VisualElement class="control-section">
                 <ui:Label class="section-title" text="SIMULATION" />
                 <ui:VisualElement class="button-row">
                     <ui:Button name="impulseButton" class="action-button primary-button" text="Impulse" />

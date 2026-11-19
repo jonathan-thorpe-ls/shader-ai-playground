@@ -29,6 +29,13 @@
     border-radius: 4px;
 }
 
+.debug-view-button {
+    background-color: var(--track);
+    border-width: 1px;
+    border-color: var(--line);
+    flex-grow: 1;
+}
+
 .phase-dropdown .unity-base-popup-field__text {
     color: var(--text);
 }

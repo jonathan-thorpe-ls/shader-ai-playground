@@ -82,6 +82,20 @@ namespace Sonosthesia.ProcGeo
             return result;
         }
 
+        public void Refresh()
+        {
+            _positions = null;
+            DestroyOverlay(_wireframe, _wireframeMesh);
+            DestroyOverlay(_vertices, _verticesMesh);
+            DestroyOverlay(_normals, _normalsMesh);
+            _wireframe = null;
+            _wireframeMesh = null;
+            _vertices = null;
+            _verticesMesh = null;
+            _normals = null;
+            _normalsMesh = null;
+        }
+
         public GeometryInspection Inspect(int vertex)
         {
             GeometryResource resource = _geometry.Resource;
@@ -308,6 +322,27 @@ namespace Sonosthesia.ProcGeo
                     _normals.GetComponent<MeshRenderer>().sharedMaterial;
                 if (Application.isPlaying) Destroy(material);
                 else DestroyImmediate(material);
+            }
+        }
+
+        private void DestroyOverlay(GameObject overlay, Mesh mesh)
+        {
+            if (overlay != null)
+            {
+                Material material =
+                    overlay.GetComponent<MeshRenderer>()?.sharedMaterial;
+                if (material != null && material != _lineMaterial)
+                {
+                    if (Application.isPlaying) Destroy(material);
+                    else DestroyImmediate(material);
+                }
+                if (Application.isPlaying) Destroy(overlay);
+                else DestroyImmediate(overlay);
+            }
+            if (mesh != null)
+            {
+                if (Application.isPlaying) Destroy(mesh);
+                else DestroyImmediate(mesh);
             }
         }
     }

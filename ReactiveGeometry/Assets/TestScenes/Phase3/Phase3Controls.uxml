@@ -10,6 +10,11 @@
             </ui:VisualElement>
             <ui:Label name="diagnostics" class="diagnostics" text="Waiting for field state..." />
             <ui:VisualElement class="control-section">
+                <ui:Label class="section-title" text="MESH DENSITY" />
+                <ui:SliderInt name="densitySlider" class="control-slider" low-value="1" high-value="16" value="4" />
+                <ui:Label class="control-caption" text="Icosphere generation frequency" />
+            </ui:VisualElement>
+            <ui:VisualElement class="control-section">
                 <ui:Label class="section-title" text="GRAPH SOURCE" />
                 <ui:VisualElement class="slider-heading">
                     <ui:Label class="slider-label" text="Source vertex" />
@@ -27,13 +32,17 @@
                 <ui:Label class="control-caption" text="Pulse amplitude" />
                 <ui:Slider name="widthSlider" class="control-slider" low-value="0.04" high-value="0.5" value="0.16" />
                 <ui:Label class="control-caption" text="Pulse width" />
-                <ui:Slider name="frequencySlider" class="control-slider" low-value="0.1" high-value="2" value="0.65" />
-                <ui:Label class="control-caption" text="Pulse frequency" />
+                <ui:Slider name="pulseRateSlider" class="control-slider" low-value="0.1" high-value="2" value="0.65" />
+                <ui:Label class="control-caption" text="Pulse rate" />
                 <ui:Toggle name="directionalToggle" class="phase-toggle" text="Directional force" />
             </ui:VisualElement>
             <ui:VisualElement class="control-section">
                 <ui:Label class="section-title" text="DEBUG VIEW" />
-                <ui:DropdownField name="debugAttribute" class="phase-dropdown" choices="Lit,Graph distance,Curvature" index="1" />
+                <ui:VisualElement name="debugViewButtons" class="button-row">
+                    <ui:Button name="litButton" class="action-button debug-view-button" text="Lit" />
+                    <ui:Button name="distanceButton" class="action-button debug-view-button" text="Distance" />
+                    <ui:Button name="curvatureButton" class="action-button debug-view-button" text="Curvature" />
+                </ui:VisualElement>
                 <ui:Toggle name="wireframeToggle" class="phase-toggle" text="Rest topology overlay" />
                 <ui:Toggle name="verticesToggle" class="phase-toggle" text="Vertex markers" />
                 <ui:Toggle name="normalsToggle" class="phase-toggle" text="Rest normal glyphs" />

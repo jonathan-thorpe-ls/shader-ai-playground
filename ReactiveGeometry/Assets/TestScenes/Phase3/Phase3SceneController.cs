@@ -20,16 +20,16 @@ namespace Sonosthesia.ProcGeo
         private ProceduralMeshRenderer _renderer;
         private GeometryDebugOverlay _debug;
         private UIDocument _document;
+        private SliderInt _density;
         private SliderInt _source;
         private Slider _amplitude;
         private Slider _width;
-        private Slider _frequency;
+        private Slider _pulseRate;
         private Toggle _pulse;
         private Toggle _directional;
         private Toggle _wireframe;
         private Toggle _vertices;
         private Toggle _normals;
-        private DropdownField _debugAttribute;
         private Label _diagnostics;
         private Label _inspection;
         private Label _pauseButtonLabel;
@@ -38,12 +38,20 @@ namespace Sonosthesia.ProcGeo
         private bool _bound;
         private float _nextDiagnosticsTime;
         private VisualElement _root;
+        private DebugView _debugView = DebugView.GraphDistance;
 
         public enum SceneMode
         {
             GraphDistance,
             FieldComposition,
             DebugInspection
+        }
+
+        private enum DebugView
+        {
+            Lit,
+            GraphDistance,
+            Curvature
         }
 
         private void Awake()
@@ -97,23 +105,23 @@ namespace Sonosthesia.ProcGeo
         {
             VisualElement root = _document.rootVisualElement;
             _root = root.Q<VisualElement>("root");
+            _density = root.Q<SliderInt>("densitySlider");
             _source = root.Q<SliderInt>("sourceSlider");
             _amplitude = root.Q<Slider>("amplitudeSlider");
             _width = root.Q<Slider>("widthSlider");
-            _frequency = root.Q<Slider>("frequencySlider");
+            _pulseRate = root.Q<Slider>("pulseRateSlider");
             _pulse = root.Q<Toggle>("pulseToggle");
             _directional = root.Q<Toggle>("directionalToggle");
             _wireframe = root.Q<Toggle>("wireframeToggle");
             _vertices = root.Q<Toggle>("verticesToggle");
             _normals = root.Q<Toggle>("normalsToggle");
-            _debugAttribute = root.Q<DropdownField>("debugAttribute");
             _diagnostics = root.Q<Label>("diagnostics");
             _inspection = root.Q<Label>("inspection");
             _pauseButton = root.Q<Button>("pauseButton");
-            if (_source == null || _amplitude == null || _width == null ||
-                _frequency == null || _pulse == null || _directional == null ||
+            if (_density == null || _source == null ||
+                _amplitude == null || _width == null ||
+                _pulseRate == null || _pulse == null || _directional == null ||
                 _wireframe == null || _vertices == null || _normals == null ||
-                _debugAttribute == null ||
                 _diagnostics == null || _inspection == null || _pauseButton == null)
             {
                 Debug.LogError("Phase 3 UI Toolkit document is missing controls.", this);
@@ -123,18 +131,20 @@ namespace Sonosthesia.ProcGeo
 
             root.Q<Label>("sceneTitle").text = sceneTitle;
             root.Q<Label>("sceneSubtitle").text = sceneSubtitle;
+            _density.SetValueWithoutNotify(_renderer.Frequency);
             _source.highValue = Mathf.Max(0, _renderer.VertexCount - 1);
             _source.SetValueWithoutNotify(fieldSettings.graphSourceVertex);
             _amplitude.SetValueWithoutNotify(fieldSettings.pulseAmplitude);
             _width.SetValueWithoutNotify(fieldSettings.pulseWidth);
-            _frequency.SetValueWithoutNotify(fieldSettings.pulseFrequency);
+            _pulseRate.SetValueWithoutNotify(fieldSettings.pulseFrequency);
             _pulse.SetValueWithoutNotify(fieldSettings.pulseEnabled);
             _directional.SetValueWithoutNotify(fieldSettings.directionalEnabled);
             _wireframe.SetValueWithoutNotify(false);
             _vertices.SetValueWithoutNotify(false);
             _normals.SetValueWithoutNotify(false);
-            _debugAttribute.index =
-                sceneMode == SceneMode.FieldComposition ? 0 : 1;
+            _debugView = sceneMode == SceneMode.FieldComposition
+                ? DebugView.Lit
+                : DebugView.GraphDistance;
             _pauseButtonLabel = new Label("Pause")
             {
                 pickingMode = PickingMode.Ignore
@@ -145,11 +155,13 @@ namespace Sonosthesia.ProcGeo
             root.Q<Button>("applyButton").clicked += ApplyConfiguration;
             root.Q<Button>("resetButton").clicked += ResetSimulation;
             root.Q<Button>("inspectButton").clicked += InspectSource;
+            root.Q<Button>("litButton").clicked += UseLitView;
+            root.Q<Button>("distanceButton").clicked += UseDistanceView;
+            root.Q<Button>("curvatureButton").clicked += UseCurvatureView;
             _pauseButton.clicked += TogglePause;
             _wireframe.RegisterValueChangedCallback(SetWireframe);
             _vertices.RegisterValueChangedCallback(SetVertices);
             _normals.RegisterValueChangedCallback(SetNormals);
-            _debugAttribute.RegisterValueChangedCallback(SetDebugAttribute);
             _root.RegisterCallback<PointerDownEvent>(PickFromPointer);
             _bound = true;
         }
@@ -167,26 +179,39 @@ namespace Sonosthesia.ProcGeo
             root.Q<Button>("applyButton").clicked -= ApplyConfiguration;
             root.Q<Button>("resetButton").clicked -= ResetSimulation;
             root.Q<Button>("inspectButton").clicked -= InspectSource;
+            root.Q<Button>("litButton").clicked -= UseLitView;
+            root.Q<Button>("distanceButton").clicked -= UseDistanceView;
+            root.Q<Button>("curvatureButton").clicked -= UseCurvatureView;
             _pauseButton.clicked -= TogglePause;
             _wireframe.UnregisterValueChangedCallback(SetWireframe);
             _vertices.UnregisterValueChangedCallback(SetVertices);
             _normals.UnregisterValueChangedCallback(SetNormals);
-            _debugAttribute.UnregisterValueChangedCallback(SetDebugAttribute);
             _root.UnregisterCallback<PointerDownEvent>(PickFromPointer);
             _bound = false;
         }
 
         private void ApplyConfiguration()
         {
+            bool densityChanged = _density.value != _renderer.Frequency;
             if (_source != null)
             {
                 fieldSettings.graphSourceVertex = _source.value;
                 fieldSettings.pulseAmplitude = _amplitude.value;
                 fieldSettings.pulseWidth = _width.value;
-                fieldSettings.pulseFrequency = _frequency.value;
+                fieldSettings.pulseFrequency = _pulseRate.value;
                 fieldSettings.pulseEnabled = _pulse.value;
                 fieldSettings.directionalEnabled = _directional.value;
                 _inspection.text = "Configuration applied. Inspect the source for details.";
+            }
+            if (densityChanged)
+            {
+                _renderer.SetIcosphereSettings(_density.value, _renderer.Radius);
+                _source.highValue = Mathf.Max(0, _renderer.VertexCount - 1);
+                fieldSettings.graphSourceVertex =
+                    Mathf.Clamp(fieldSettings.graphSourceVertex, 0, _source.highValue);
+                _source.SetValueWithoutNotify(fieldSettings.graphSourceVertex);
+                _debug.Refresh();
+                RestoreDebugOverlays();
             }
             _renderer.SetFieldSettings(fieldSettings);
             UpdateDebugAttribute();
@@ -252,20 +277,31 @@ namespace Sonosthesia.ProcGeo
             _debug.NormalsVisible = change.newValue;
         }
 
-        private void SetDebugAttribute(ChangeEvent<string> change)
+        public void UseLitView()
         {
+            _debugView = DebugView.Lit;
+            UpdateDebugAttribute();
+        }
+
+        public void UseDistanceView()
+        {
+            _debugView = DebugView.GraphDistance;
+            UpdateDebugAttribute();
+        }
+
+        public void UseCurvatureView()
+        {
+            _debugView = DebugView.Curvature;
             UpdateDebugAttribute();
         }
 
         private void UpdateDebugAttribute()
         {
-            if (_debugAttribute == null || _debugAttribute.index < 0)
-                return;
-            if (_debugAttribute.index == 0)
+            if (_debugView == DebugView.Lit)
             {
                 _renderer.ShowLitMaterial();
             }
-            else if (_debugAttribute.index == 1)
+            else if (_debugView == DebugView.GraphDistance)
             {
                 _renderer.SetDebugAttribute(AttributeIds.GraphDistance01, 0f, 1f);
             }
@@ -273,6 +309,13 @@ namespace Sonosthesia.ProcGeo
             {
                 _renderer.SetDebugAttribute(AttributeIds.Curvature, -0.25f, 0.25f);
             }
+        }
+
+        private void RestoreDebugOverlays()
+        {
+            _debug.WireframeVisible = _wireframe.value;
+            _debug.VerticesVisible = _vertices.value;
+            _debug.NormalsVisible = _normals.value;
         }
     }
 }
