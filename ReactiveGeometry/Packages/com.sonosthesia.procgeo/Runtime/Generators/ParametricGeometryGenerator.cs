@@ -195,6 +195,7 @@ namespace Sonosthesia.ProcGeo
         public int EdgeCount => _data.EdgeCount;
         public Bounds Bounds => _data.Bounds;
         public Vector3[] DebugPositions => _data.Positions;
+        public Vector3[] DebugNormals => _data.Normals;
         public Vector3Int[] DebugTriangles => _data.Triangles;
 
         public void Dispose()
@@ -271,15 +272,25 @@ namespace Sonosthesia.ProcGeo
                     else
                     {
                         p = Evaluate(type, settings, uf, vf);
-                        Vector3 pu = (Evaluate(
-                            type, settings, Wrap01(uf + epsilon), vf) -
-                            Evaluate(type, settings, Wrap01(uf - epsilon), vf)) /
-                            (2f * epsilon);
-                        Vector3 pv = (Evaluate(
-                            type, settings, uf, Wrap01(vf + epsilon)) -
-                            Evaluate(type, settings, uf, Wrap01(vf - epsilon))) /
-                            (2f * epsilon);
-                        normal = Vector3.Cross(pu, pv);
+                        float u0 = wrapU
+                            ? Wrap01(uf - epsilon)
+                            : Mathf.Max(0f, uf - epsilon);
+                        float u1 = wrapU
+                            ? Wrap01(uf + epsilon)
+                            : Mathf.Min(1f, uf + epsilon);
+                        float v0 = wrapV
+                            ? Wrap01(vf - epsilon)
+                            : Mathf.Max(0f, vf - epsilon);
+                        float v1 = wrapV
+                            ? Wrap01(vf + epsilon)
+                            : Mathf.Min(1f, vf + epsilon);
+                        Vector3 pu = (Evaluate(type, settings, u1, vf) -
+                            Evaluate(type, settings, u0, vf)) /
+                            (wrapU ? 2f * epsilon : u1 - u0);
+                        Vector3 pv = (Evaluate(type, settings, uf, v1) -
+                            Evaluate(type, settings, uf, v0)) /
+                            (wrapV ? 2f * epsilon : v1 - v0);
+                        normal = Vector3.Cross(pv, pu);
                         tangent = pu;
                     }
                     if (normal.sqrMagnitude < 1e-12f)

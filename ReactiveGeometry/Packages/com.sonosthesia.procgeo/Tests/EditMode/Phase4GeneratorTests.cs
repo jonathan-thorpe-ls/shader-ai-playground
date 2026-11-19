@@ -79,5 +79,77 @@ namespace Sonosthesia.ProcGeo.Tests
                         triangle.z != triangle.x),
                 Is.True);
         }
+
+        [Test]
+        public void PlaneNormalsAndWindingFaceUp()
+        {
+            using ParametricGeometryGenerator generator = new(
+                ParametricGeometryType.Plane,
+                SmallSettings());
+
+            Assert.That(
+                Array.TrueForAll(
+                    generator.DebugNormals,
+                    normal => Vector3.Dot(normal, Vector3.up) > 0.999f),
+                Is.True);
+            AssertAllTriangleNormalsTowardExpected(generator, Vector3.up);
+        }
+
+        [Test]
+        public void CylinderNormalsAndWindingFaceOutward()
+        {
+            using ParametricGeometryGenerator generator = new(
+                ParametricGeometryType.Cylinder,
+                SmallSettings());
+
+            for (int i = 0; i < generator.DebugPositions.Length; i++)
+            {
+                Vector3 expected = generator.DebugPositions[i];
+                expected.y = 0f;
+                expected.Normalize();
+                Assert.That(Vector3.Dot(generator.DebugNormals[i], expected), Is.GreaterThan(0.999f));
+            }
+        }
+
+        [Test]
+        public void TorusNormalsAndWindingFaceOutward()
+        {
+            ParametricGeometrySettings settings = SmallSettings();
+            using ParametricGeometryGenerator generator = new(
+                ParametricGeometryType.Torus,
+                settings);
+
+            for (int i = 0; i < generator.DebugPositions.Length; i++)
+            {
+                Vector3 p = generator.DebugPositions[i];
+                Vector3 centreline =
+                    new Vector3(p.x, 0f, p.z).normalized * settings.radius;
+                Vector3 expected = (p - centreline).normalized;
+                Assert.That(Vector3.Dot(generator.DebugNormals[i], expected), Is.GreaterThan(0.999f));
+            }
+        }
+
+        private static ParametricGeometrySettings SmallSettings()
+        {
+            ParametricGeometrySettings settings = ParametricGeometrySettings.Default;
+            settings.uSegments = 16;
+            settings.vSegments = 8;
+            return settings;
+        }
+
+        private static void AssertAllTriangleNormalsTowardExpected(
+            ParametricGeometryGenerator generator,
+            Vector3 expected)
+        {
+            foreach (Vector3Int triangle in generator.DebugTriangles)
+            {
+                Vector3 a = generator.DebugPositions[triangle.x];
+                Vector3 b = generator.DebugPositions[triangle.y];
+                Vector3 c = generator.DebugPositions[triangle.z];
+                Assert.That(
+                    Vector3.Dot(Vector3.Cross(b - a, c - a).normalized, expected),
+                    Is.GreaterThan(0.999f));
+            }
+        }
     }
 }
