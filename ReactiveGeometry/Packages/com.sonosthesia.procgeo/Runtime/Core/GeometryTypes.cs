@@ -75,6 +75,7 @@ namespace Sonosthesia.ProcGeo
     {
         public static readonly AttributeId RestPosition = new("RestPosition");
         public static readonly AttributeId RestNormal = new("RestNormal");
+        public static readonly AttributeId Mass = new("Mass");
         public static readonly AttributeId RestTangent = new("RestTangent");
         public static readonly AttributeId LocalCoord = new("LocalCoord");
         public static readonly AttributeId RegionId = new("RegionId");

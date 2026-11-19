@@ -131,15 +131,19 @@ namespace Sonosthesia.ProcGeo
                 layout.VertexCount,
                 3 * sizeof(float));
             GpuBufferRegistry.Register(_prevPositions, $"{layout.Name}.PrevPositions", owner);
+            Simulation = new SimulationState(layout, owner);
         }
 
         public GraphicsBuffer DynamicVertices => _dynamicVertices;
+        // Reserved for motion vectors; Phase 2 refreshes it only on reset.
         public GraphicsBuffer PreviousPositions => _prevPositions;
+        public SimulationState Simulation { get; }
 
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
+            Simulation.Dispose();
             GpuBufferRegistry.Unregister(_dynamicVertices);
             _dynamicVertices?.Release();
             _dynamicVertices = null;

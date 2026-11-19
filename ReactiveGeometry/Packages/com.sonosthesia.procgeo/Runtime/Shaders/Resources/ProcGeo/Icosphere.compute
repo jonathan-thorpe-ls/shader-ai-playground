@@ -34,6 +34,7 @@ StructuredBuffer<uint> _TriangleRegions;
 
 RWStructuredBuffer<float3> _RestPositions;
 RWStructuredBuffer<float3> _RestNormals;
+RWStructuredBuffer<float> _Masses;
 RWStructuredBuffer<float4> _RestTangents;
 RWStructuredBuffer<float2> _CornerCoords;
 RWStructuredBuffer<uint> _RegionIds;
@@ -133,6 +134,7 @@ void GenerateVertices(uint3 dispatchId : SV_DispatchThreadID)
 
     _RestPositions[vertexId] = position;
     _RestNormals[vertexId] = normal;
+    _Masses[vertexId] = 1.0;
     _RestTangents[vertexId] = tangentWithHandedness;
 
     uint dynamicOffset = vertexId * DYNAMIC_VERTEX_STRIDE;

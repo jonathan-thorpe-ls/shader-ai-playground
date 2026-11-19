@@ -131,8 +131,9 @@ GameObject:
   - component: {fileID: 261726805}
   - component: {fileID: 261726804}
   - component: {fileID: 261726803}
+  - component: {fileID: 261726806}
   m_Layer: 0
-  m_Name: Procedural Icosphere (Phase 1 Baseline)
+  m_Name: Icosphere - Stability Stress
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -163,11 +164,22 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 011c63f2a44577442994210f401152d6, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: Sonosthesia.ProcGeo.Runtime.URP::Sonosthesia.ProcGeo.ProceduralMeshRenderer
   frequency: 8
   radius: 1
   color: {r: 0.2, g: 0.6, b: 1, a: 1}
+  simulationEnabled: 1
+  simulationParameters:
+    fixedDeltaTime: 0.016666668
+    maximumSubsteps: 4
+    maximumCatchUpTime: 0.25
+    stiffness: 90
+    restoringStiffness: 12
+    damping: 2.5
+    maximumVelocity: 12
+    maximumDisplacement: 0.35
+    paused: 0
 --- !u!23 &261726804
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -225,6 +237,24 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 261726801}
   m_Mesh: {fileID: 0}
+--- !u!114 &261726806
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 261726801}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9bf7238afc7f67c4690919533a155595, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::Sonosthesia.ProcGeo.Phase2SceneController
+  impulseVertex: 0
+  impulseDirection: {x: 0, y: 1, z: 0}
+  impulseMagnitude: 2
+  repeatImpulses: 1
+  repeatInterval: 0.75
+  initialPreset: 2
 --- !u!1 &364497274
 GameObject:
   m_ObjectHideFlags: 0

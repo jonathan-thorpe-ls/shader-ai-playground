@@ -1,0 +1,197 @@
+#pragma kernel InitializeState
+#pragma kernel ApplyImpulse
+#pragma kernel NeighbourIntegrate
+#pragma kernel PublishDynamicMesh
+
+StructuredBuffer<float3> _RestPositions;
+StructuredBuffer<float3> _RestNormals;
+StructuredBuffer<float> _Masses;
+StructuredBuffer<uint> _NeighbourOffsets;
+StructuredBuffer<uint> _Neighbours;
+StructuredBuffer<uint> _NeighbourEdge;
+StructuredBuffer<float> _RestLengths;
+StructuredBuffer<uint> _EdgeTypes;
+StructuredBuffer<uint> _Indices;
+StructuredBuffer<uint> _VertexFaceOffsets;
+StructuredBuffer<uint> _VertexFaces;
+
+RWStructuredBuffer<float3> _PositionsA;
+RWStructuredBuffer<float3> _PositionsB;
+RWStructuredBuffer<float3> _VelocitiesA;
+RWStructuredBuffer<float3> _VelocitiesB;
+StructuredBuffer<float3> _ReadPositions;
+StructuredBuffer<float3> _ReadVelocities;
+RWStructuredBuffer<float3> _WritePositions;
+RWStructuredBuffer<float3> _WriteVelocities;
+RWStructuredBuffer<float3> _CurrentVelocities;
+RWStructuredBuffer<float3> _PreviousPositions;
+RWStructuredBuffer<uint> _SimulationStatus;
+RWByteAddressBuffer _DynamicVertices;
+
+uint _VertexCount;
+uint _ImpulseVertex;
+float3 _ImpulseDirection;
+float _ImpulseMagnitude;
+float _DeltaTime;
+float _Epsilon;
+float _Stiffness;
+float _RestoringStiffness;
+float _Damping;
+float _MaximumVelocity;
+float _MaximumDisplacement;
+
+static const uint DYNAMIC_VERTEX_STRIDE = 24;
+
+[numthreads(64, 1, 1)]
+void InitializeState(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex < _VertexCount)
+    {
+        float3 position = _RestPositions[vertex];
+        _PositionsA[vertex] = position;
+        _PositionsB[vertex] = position;
+        _VelocitiesA[vertex] = 0;
+        _VelocitiesB[vertex] = 0;
+        _PreviousPositions[vertex] = position;
+    }
+    if (vertex < 6)
+        _SimulationStatus[vertex] = 0;
+}
+
+[numthreads(1, 1, 1)]
+void ApplyImpulse(uint3 id : SV_DispatchThreadID)
+{
+    if (_ImpulseVertex < _VertexCount)
+        _CurrentVelocities[_ImpulseVertex] += _ImpulseDirection * _ImpulseMagnitude;
+}
+
+bool IsFinite3(float3 value)
+{
+    return isfinite(value.x) && isfinite(value.y) && isfinite(value.z);
+}
+
+[numthreads(64, 1, 1)]
+void NeighbourIntegrate(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+
+    float3 position = _ReadPositions[vertex];
+    float3 velocity = _ReadVelocities[vertex];
+    float3 restPosition = _RestPositions[vertex];
+    if (!IsFinite3(position) || !IsFinite3(velocity))
+    {
+        position = restPosition;
+        velocity = 0;
+        InterlockedAdd(_SimulationStatus[0], 1);
+    }
+
+    float3 force = 0;
+    for (uint slot = _NeighbourOffsets[vertex];
+         slot < _NeighbourOffsets[vertex + 1];
+         slot++)
+    {
+        uint neighbour = _Neighbours[slot];
+        uint edge = _NeighbourEdge[slot];
+        if (_EdgeTypes[edge] != 0)
+            continue;
+
+        float3 delta = _ReadPositions[neighbour] - position;
+        float distanceSquared = dot(delta, delta);
+        float3 direction;
+        if (distanceSquared > _Epsilon * _Epsilon)
+        {
+            direction = delta * rsqrt(distanceSquared);
+        }
+        else
+        {
+            float3 restDelta = _RestPositions[neighbour] - restPosition;
+            float restDistanceSquared = dot(restDelta, restDelta);
+            direction = restDistanceSquared > _Epsilon * _Epsilon
+                ? restDelta * rsqrt(restDistanceSquared)
+                : float3(1.0, 0.0, 0.0);
+            InterlockedAdd(_SimulationStatus[0], 1);
+        }
+
+        force += _Stiffness * (sqrt(max(distanceSquared, 0.0)) - _RestLengths[edge]) * direction;
+    }
+
+    force += _RestoringStiffness * (restPosition - position);
+    force -= _Damping * velocity;
+    float mass = max(abs(_Masses[vertex]), _Epsilon);
+    float3 nextVelocity = velocity + (force / mass) * _DeltaTime;
+    if (!IsFinite3(nextVelocity))
+    {
+        nextVelocity = 0;
+        InterlockedAdd(_SimulationStatus[0], 1);
+    }
+
+    float speed = length(nextVelocity);
+    if (speed > _MaximumVelocity)
+    {
+        nextVelocity *= _MaximumVelocity / max(speed, _Epsilon);
+        speed = _MaximumVelocity;
+        InterlockedAdd(_SimulationStatus[1], 1);
+    }
+
+    float3 nextPosition = position + nextVelocity * _DeltaTime;
+    float3 displacement = nextPosition - restPosition;
+    float displacementMagnitude = length(displacement);
+    if (!IsFinite3(nextPosition))
+    {
+        nextPosition = restPosition;
+        nextVelocity = 0;
+        displacementMagnitude = 0;
+        speed = 0;
+        InterlockedAdd(_SimulationStatus[0], 1);
+    }
+    else if (displacementMagnitude > _MaximumDisplacement)
+    {
+        nextPosition = restPosition +
+            displacement * (_MaximumDisplacement / max(displacementMagnitude, _Epsilon));
+        displacementMagnitude = _MaximumDisplacement;
+        InterlockedAdd(_SimulationStatus[2], 1);
+    }
+
+    _WriteVelocities[vertex] = nextVelocity;
+    _WritePositions[vertex] = nextPosition;
+    InterlockedMax(_SimulationStatus[3], asuint(speed));
+    InterlockedMax(_SimulationStatus[4], asuint(displacementMagnitude));
+    if (vertex == 0)
+        InterlockedAdd(_SimulationStatus[5], 1);
+}
+
+[numthreads(64, 1, 1)]
+void PublishDynamicMesh(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+
+    float3 weightedNormal = 0;
+    for (uint slot = _VertexFaceOffsets[vertex];
+         slot < _VertexFaceOffsets[vertex + 1];
+         slot++)
+    {
+        uint primitive = _VertexFaces[slot];
+        uint a = _Indices[primitive * 3];
+        uint b = _Indices[primitive * 3 + 1];
+        uint c = _Indices[primitive * 3 + 2];
+        weightedNormal += cross(
+            _ReadPositions[b] - _ReadPositions[a],
+            _ReadPositions[c] - _ReadPositions[a]);
+    }
+    float lengthSquared = dot(weightedNormal, weightedNormal);
+    float3 normal = lengthSquared > _Epsilon * _Epsilon && IsFinite3(weightedNormal)
+        ? weightedNormal * rsqrt(lengthSquared)
+        : _RestNormals[vertex];
+    float3 position = IsFinite3(_ReadPositions[vertex])
+        ? _ReadPositions[vertex]
+        : _RestPositions[vertex];
+
+    uint offset = vertex * DYNAMIC_VERTEX_STRIDE;
+    _DynamicVertices.Store3(offset, asuint(position));
+    _DynamicVertices.Store3(offset + 12, asuint(normal));
+}

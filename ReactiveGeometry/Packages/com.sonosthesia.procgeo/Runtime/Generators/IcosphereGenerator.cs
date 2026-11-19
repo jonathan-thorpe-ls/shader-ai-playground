@@ -54,6 +54,7 @@ namespace Sonosthesia.ProcGeo
             {
                 new(AttributeIds.RestPosition, AttributeDomain.Vertex, AttributeFormat.Float3),
                 new(AttributeIds.RestNormal, AttributeDomain.Vertex, AttributeFormat.Float3),
+                new(AttributeIds.Mass, AttributeDomain.Vertex, AttributeFormat.Float),
                 new(AttributeIds.RestTangent, AttributeDomain.Vertex, AttributeFormat.Float4),
                 new(AttributeIds.LocalCoord, AttributeDomain.Corner, AttributeFormat.Float2),
                 new(AttributeIds.RegionId, AttributeDomain.Primitive, AttributeFormat.UInt,
@@ -124,6 +125,8 @@ namespace Sonosthesia.ProcGeo
                 _shader, _verticesKernel, AttributeIds.RestPosition, "_RestPositions");
             resource.Attributes.Bind(
                 _shader, _verticesKernel, AttributeIds.RestNormal, "_RestNormals");
+            resource.Attributes.Bind(
+                _shader, _verticesKernel, AttributeIds.Mass, "_Masses");
             resource.Attributes.Bind(
                 _shader, _verticesKernel, AttributeIds.RestTangent, "_RestTangents");
         }
