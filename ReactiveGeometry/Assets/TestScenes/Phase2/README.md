@@ -3,7 +3,9 @@
 This folder is the manual exploration area for the dynamic neighbour simulation planned in
 [`Docs/Implementation/Phase2-DynamicNeighbourSimulation.md`](../../../../Docs/Implementation/Phase2-DynamicNeighbourSimulation.md).
 
-The scenes contain simulation-enabled procedural icospheres and a shared on-screen operator panel. The panel provides impulse, reset, pause/resume, single-step, parameter sliders and gentle/nominal/maximum presets.
+The scenes contain simulation-enabled procedural icospheres and a shared UI Toolkit operator
+panel. The panel provides impulse, reset, pause/resume, single-step, parameter sliders and
+gentle/nominal/maximum presets.
 
 ## Scenes
 

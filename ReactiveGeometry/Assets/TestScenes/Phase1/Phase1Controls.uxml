@@ -1,0 +1,42 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:Style src="../TestSceneUi.uss" />
+    <ui:VisualElement name="root" class="test-scene-shell">
+        <ui:VisualElement name="panel" class="control-panel">
+            <ui:VisualElement class="panel-header">
+                <ui:Label class="eyebrow" text="PHASE 1 / GEOMETRY LAB" />
+                <ui:Label name="sceneTitle" class="scene-title" text="GPU icosphere" />
+                <ui:Label name="sceneSubtitle" class="scene-subtitle" />
+            </ui:VisualElement>
+            <ui:Label name="diagnostics" class="diagnostics" text="Generating..." />
+            <ui:VisualElement class="control-section">
+                <ui:Label class="section-title" text="GEOMETRY" />
+                <ui:VisualElement class="slider-field">
+                    <ui:VisualElement class="slider-heading">
+                        <ui:Label class="slider-label" text="Frequency" />
+                        <ui:Label name="frequencyValue" class="slider-value" text="4" />
+                    </ui:VisualElement>
+                    <ui:SliderInt name="frequencySlider" class="control-slider" low-value="1" high-value="16" value="4" />
+                </ui:VisualElement>
+                <ui:VisualElement class="slider-field">
+                    <ui:VisualElement class="slider-heading">
+                        <ui:Label class="slider-label" text="Radius" />
+                        <ui:Label name="radiusValue" class="slider-value" text="1.00" />
+                    </ui:VisualElement>
+                    <ui:Slider name="radiusSlider" class="control-slider" low-value="0.25" high-value="2" value="1" />
+                </ui:VisualElement>
+                <ui:Button name="regenerateButton" class="action-button primary-button" text="Regenerate" />
+            </ui:VisualElement>
+            <ui:VisualElement class="control-section">
+                <ui:Label class="section-title" text="QUALITY PRESETS" />
+                <ui:VisualElement class="button-row">
+                    <ui:Button name="baseButton" class="action-button preset-button" text="Base" />
+                    <ui:Button name="mediumButton" class="action-button preset-button" text="Medium" />
+                </ui:VisualElement>
+                <ui:VisualElement class="button-row">
+                    <ui:Button name="highButton" class="action-button preset-button" text="High" />
+                    <ui:Button name="stressButton" class="action-button preset-button" text="Stress" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

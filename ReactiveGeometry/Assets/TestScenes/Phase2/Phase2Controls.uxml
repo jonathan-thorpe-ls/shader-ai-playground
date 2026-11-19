@@ -1,0 +1,47 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:Style src="../TestSceneUi.uss" />
+    <ui:VisualElement name="root" class="test-scene-shell">
+        <ui:VisualElement name="panel" class="control-panel">
+            <ui:VisualElement class="panel-header">
+                <ui:Label class="eyebrow" text="PHASE 2 / NEIGHBOUR SIMULATION" />
+                <ui:Label name="sceneTitle" class="scene-title" text="Dynamic neighbours" />
+                <ui:Label name="sceneSubtitle" class="scene-subtitle" />
+            </ui:VisualElement>
+            <ui:Label name="diagnostics" class="diagnostics" text="Waiting for simulation..." />
+            <ui:VisualElement class="control-section">
+                <ui:Label class="section-title" text="SIMULATION" />
+                <ui:VisualElement class="button-row">
+                    <ui:Button name="impulseButton" class="action-button primary-button" text="Impulse" />
+                    <ui:Button name="resetButton" class="action-button" text="Reset" />
+                </ui:VisualElement>
+                <ui:VisualElement class="button-row">
+                    <ui:Button name="pauseButton" class="action-button" text="Pause" />
+                    <ui:Button name="singleStepButton" class="action-button" text="Single step" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:VisualElement class="control-section">
+                <ui:Label class="section-title" text="PARAMETERS" />
+                <ui:VisualElement class="slider-field">
+                    <ui:Label class="slider-label" text="Structural stiffness" />
+                    <ui:Slider name="stiffnessSlider" class="control-slider" low-value="0" high-value="240" value="90" />
+                </ui:VisualElement>
+                <ui:VisualElement class="slider-field">
+                    <ui:Label class="slider-label" text="Restoring stiffness" />
+                    <ui:Slider name="restoringStiffnessSlider" class="control-slider" low-value="0" high-value="30" value="12" />
+                </ui:VisualElement>
+                <ui:VisualElement class="slider-field">
+                    <ui:Label class="slider-label" text="Damping" />
+                    <ui:Slider name="dampingSlider" class="control-slider" low-value="0" high-value="16" value="2.5" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+            <ui:VisualElement class="control-section">
+                <ui:Label class="section-title" text="PRESETS" />
+                <ui:VisualElement class="button-row">
+                    <ui:Button name="gentleButton" class="action-button preset-button" text="Gentle" />
+                    <ui:Button name="nominalButton" class="action-button preset-button" text="Nominal" />
+                    <ui:Button name="maximumButton" class="action-button preset-button" text="Maximum" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+    </ui:VisualElement>
+</ui:UXML>

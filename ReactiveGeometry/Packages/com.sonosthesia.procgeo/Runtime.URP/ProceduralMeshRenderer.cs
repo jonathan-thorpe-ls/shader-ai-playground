@@ -30,6 +30,8 @@ namespace Sonosthesia.ProcGeo
 
         public int VertexCount => _resource?.Layout.VertexCount ?? 0;
         public int TriangleCount => _resource?.Layout.PrimitiveCount ?? 0;
+        public int Frequency => frequency;
+        public float Radius => radius;
         public GeometryResource Resource => _resource;
         public NeighbourSimulation Simulation => _simulation;
         public SimulationParameters Parameters => _validatedParameters;
@@ -48,6 +50,14 @@ namespace Sonosthesia.ProcGeo
             }
         }
         public bool IsGenerated => _resource != null && _resource.Version > 0;
+
+        public void SetIcosphereSettings(int newFrequency, float newRadius)
+        {
+            frequency = Mathf.Max(1, newFrequency);
+            radius = Mathf.Max(0.001f, newRadius);
+            if (isActiveAndEnabled)
+                Generate();
+        }
 
         private void Awake()
         {

@@ -151,7 +151,6 @@ Transform:
   - {fileID: 718823392}
   - {fileID: 82428826}
   - {fileID: 1132583087}
-  - {fileID: 1154408387}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &82428825
@@ -347,6 +346,7 @@ GameObject:
   - component: {fileID: 1132583089}
   - component: {fileID: 1132583088}
   - component: {fileID: 1132583091}
+  - component: {fileID: 1132583092}
   m_Layer: 0
   m_Name: Icosphere - Rest and Recovery
   m_TagString: Untagged
@@ -470,37 +470,31 @@ MonoBehaviour:
   repeatImpulses: 0
   repeatInterval: 0.75
   initialPreset: 1
---- !u!1 &1154408386
-GameObject:
+  sceneTitle: Rest and recovery
+  sceneSubtitle: Apply one impulse, inspect the neighbour response, and verify a clean reset.
+--- !u!114 &1132583092
+MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1154408387}
-  m_Layer: 0
-  m_Name: README - Phase 2 controls will be added during implementation
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1154408387
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1154408386}
-  serializedVersion: 2
-  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 67453785}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_GameObject: {fileID: 1132583086}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 19102, guid: 0000000000000000e000000000000000, type: 0}
+  m_Name:
+  m_EditorClassIdentifier: UnityEngine.dll::UnityEngine.UIElements.UIDocument
+  m_PanelSettings: {fileID: 11400000, guid: 0e8fd3dedb3dcde40b6b6b45e9f688f0, type: 2}
+  m_ParentUI: {fileID: 0}
+  sourceAsset: {fileID: 9197481963319205126, guid: 44393bc82e6388e41b1bb2ca8bc16bef, type: 3}
+  m_SortingOrder: 0
+  m_Position: 0
+  m_WorldSpaceSizeMode: 1
+  m_WorldSpaceWidth: 1920
+  m_WorldSpaceHeight: 1080
+  m_PivotReferenceSize: 0
+  m_Pivot: 0
+  m_WorldSpaceCollider: {fileID: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
