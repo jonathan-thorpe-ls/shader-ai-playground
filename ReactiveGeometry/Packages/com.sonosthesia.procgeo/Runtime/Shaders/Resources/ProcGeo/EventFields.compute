@@ -1,0 +1,118 @@
+#pragma kernel EventForce
+
+struct DeformationEvent
+{
+    uint SequenceId;
+    int Kind;
+    float CenterX;
+    float CenterY;
+    float CenterZ;
+    float StartTime;
+    float Amplitude;
+    float Radius;
+    float Width;
+    float Speed;
+    float Duration;
+    float Attenuation;
+    float Frequency;
+    float Phase;
+    int DirectionMode;
+    int Active;
+    float DirectionX;
+    float DirectionY;
+    float DirectionZ;
+};
+
+RWStructuredBuffer<float3> _ForceBuffer;
+StructuredBuffer<float3> _RestPositions;
+StructuredBuffer<float3> _RestNormals;
+StructuredBuffer<float> _DeformationWeights;
+StructuredBuffer<DeformationEvent> _Events;
+
+uint _VertexCount;
+int _EventCapacity;
+int _EventKind;
+float _SimulationTime;
+int _UseDeformationWeights;
+
+float3 eventCenter(DeformationEvent event)
+{
+    return float3(event.CenterX, event.CenterY, event.CenterZ);
+}
+
+float3 eventDirection(
+    DeformationEvent event,
+    float3 rest,
+    float3 normal,
+    float3 fromCenter)
+{
+    if (event.DirectionMode == 1)
+        return normal;
+    if (event.DirectionMode == 2 || event.DirectionMode == 3)
+        return float3(
+            event.DirectionX, event.DirectionY, event.DirectionZ);
+    float lengthSquared = dot(fromCenter, fromCenter);
+    return lengthSquared > 1e-8
+        ? fromCenter * rsqrt(lengthSquared)
+        : normal;
+}
+
+float3 evaluateImpulse(DeformationEvent event, float3 rest, float3 normal)
+{
+    if (event.Radius <= 0.0)
+        return 0;
+    float3 fromCenter = rest - eventCenter(event);
+    float distanceFromCenter = length(fromCenter);
+    float t = saturate(distanceFromCenter / event.Radius);
+    float falloff = (1.0 - t) * (1.0 - t);
+    if (distanceFromCenter >= event.Radius)
+        return 0;
+    return eventDirection(event, rest, normal, fromCenter) *
+        (event.Amplitude * falloff);
+}
+
+float3 evaluateWave(DeformationEvent event, float3 rest, float3 normal)
+{
+    float elapsed = _SimulationTime - event.StartTime;
+    if (elapsed < 0.0 || elapsed > event.Duration)
+        return 0;
+    float3 fromCenter = rest - eventCenter(event);
+    float distanceFromCenter = length(fromCenter);
+    float front = event.Speed * elapsed;
+    float bandDistance = abs(distanceFromCenter - front);
+    if (bandDistance >= event.Width)
+        return 0;
+    float compactBand = 1.0 - bandDistance / max(event.Width, 1e-5);
+    compactBand *= compactBand;
+    float shape = event.Frequency == 0.0
+        ? 1.0
+        : 0.5 + 0.5 * cos(
+            (distanceFromCenter - front) * event.Frequency + event.Phase);
+    float attenuation = exp(-event.Attenuation * elapsed);
+    return eventDirection(event, rest, normal, fromCenter) *
+        (event.Amplitude * attenuation * compactBand * shape);
+}
+
+[numthreads(64, 1, 1)]
+void EventForce(uint3 id : SV_DispatchThreadID)
+{
+    uint vertex = id.x;
+    if (vertex >= _VertexCount)
+        return;
+    float3 total = 0;
+    float3 rest = _RestPositions[vertex];
+    float3 normal = _RestNormals[vertex];
+    float weight = _UseDeformationWeights ? _DeformationWeights[vertex] : 1.0;
+    [loop]
+    for (int index = 0; index < min(_EventCapacity, 256); index++)
+    {
+        DeformationEvent event = _Events[index];
+        if (event.Active == 0 || event.Kind != _EventKind)
+            continue;
+        if (_EventKind == 0)
+            total += evaluateImpulse(event, rest, normal);
+        else
+            total += evaluateWave(event, rest, normal);
+    }
+    _ForceBuffer[vertex] = total * weight;
+}

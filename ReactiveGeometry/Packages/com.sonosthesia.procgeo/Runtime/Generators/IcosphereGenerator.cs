@@ -4,7 +4,7 @@ using UnityEngine.Rendering;
 
 namespace Sonosthesia.ProcGeo
 {
-    public sealed class IcosphereGenerator : IDisposable
+    public sealed class IcosphereGenerator : IGeometryGenerator
     {
         private readonly IcospherePlan _plan;
         private readonly ComputeShader _shader;

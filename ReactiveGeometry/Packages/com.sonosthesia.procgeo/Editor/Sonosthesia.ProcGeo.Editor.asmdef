@@ -1,0 +1,19 @@
+{
+  "name": "Sonosthesia.ProcGeo.Editor",
+  "rootNamespace": "Sonosthesia.ProcGeo.Editor",
+  "references": [
+    "Sonosthesia.ProcGeo.Runtime",
+    "Sonosthesia.ProcGeo.Runtime.URP"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

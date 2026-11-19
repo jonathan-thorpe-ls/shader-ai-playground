@@ -36,6 +36,7 @@ namespace Sonosthesia.ProcGeo
         public Vector3 direction;
         public float pulseWeight;
         public float directionalWeight;
+        public float simulationTime;
     }
 
     [Serializable]

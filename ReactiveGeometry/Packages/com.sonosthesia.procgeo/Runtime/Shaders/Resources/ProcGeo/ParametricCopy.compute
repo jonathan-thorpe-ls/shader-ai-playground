@@ -1,0 +1,119 @@
+#pragma kernel CopyParametricVertices
+#pragma kernel CopyParametricAttributes
+#pragma kernel CopyParametricTopology
+#pragma kernel CopyParametricHeader
+
+struct GeometryHeader
+{
+    uint vertexCount;
+    uint primitiveCount;
+    uint edgeCount;
+    uint regionCount;
+    float3 boundsMin;
+    uint flags;
+    float3 boundsMax;
+    uint maxDegree;
+};
+
+StructuredBuffer<float3> _SourcePositions;
+StructuredBuffer<float3> _SourceNormals;
+StructuredBuffer<float4> _SourceTangents;
+StructuredBuffer<float2> _SourceCoordinates;
+StructuredBuffer<uint3> _SourceTriangles;
+StructuredBuffer<uint> _SourceRegions;
+RWByteAddressBuffer _DynamicVertices;
+RWByteAddressBuffer _StaticVertices;
+RWByteAddressBuffer _Indices;
+RWByteAddressBuffer _DrawArgs;
+RWStructuredBuffer<float3> _RestPositions;
+RWStructuredBuffer<float3> _RestNormals;
+RWStructuredBuffer<float> _Masses;
+RWStructuredBuffer<float4> _RestTangents;
+RWStructuredBuffer<float2> _LocalCoordinates;
+RWStructuredBuffer<uint> _RegionIds;
+RWStructuredBuffer<float> _DeformationWeights;
+RWStructuredBuffer<GeometryHeader> _Header;
+
+uint _VertexCount;
+uint _PrimitiveCount;
+uint _EdgeCount;
+uint _RegionCount;
+uint _Closed;
+float3 _BoundsMin;
+float3 _BoundsMax;
+
+static const uint DYNAMIC_VERTEX_STRIDE = 24;
+static const uint STATIC_VERTEX_STRIDE = 24;
+
+[numthreads(64, 1, 1)]
+void CopyParametricVertices(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id < _VertexCount)
+    {
+        float3 position = _SourcePositions[id];
+        float3 normal = _SourceNormals[id];
+        float4 tangent = _SourceTangents[id];
+        float2 coordinate = _SourceCoordinates[id];
+
+        _RestPositions[id] = position;
+        _RestNormals[id] = normal;
+        _RestTangents[id] = tangent;
+        _LocalCoordinates[id] = coordinate;
+        uint dynamicOffset = id * DYNAMIC_VERTEX_STRIDE;
+        _DynamicVertices.Store3(dynamicOffset, asuint(position));
+        _DynamicVertices.Store3(dynamicOffset + 12, asuint(normal));
+
+        uint staticOffset = id * STATIC_VERTEX_STRIDE;
+        _StaticVertices.Store4(staticOffset, asuint(tangent));
+        _StaticVertices.Store2(staticOffset + 16, asuint(coordinate));
+    }
+
+}
+
+[numthreads(64, 1, 1)]
+void CopyParametricAttributes(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id < _VertexCount)
+    {
+        _Masses[id] = 1.0;
+        _DeformationWeights[id] = 1.0;
+    }
+}
+
+[numthreads(64, 1, 1)]
+void CopyParametricTopology(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id < _PrimitiveCount)
+    {
+        uint indexOffset = id * 12;
+        _Indices.Store3(indexOffset, _SourceTriangles[id]);
+        _RegionIds[id] = _SourceRegions[id];
+    }
+}
+
+[numthreads(1, 1, 1)]
+void CopyParametricHeader(uint3 dispatchId : SV_DispatchThreadID)
+{
+    if (dispatchId.x == 0)
+    {
+        GeometryHeader header;
+        header.vertexCount = _VertexCount;
+        header.primitiveCount = _PrimitiveCount;
+        header.edgeCount = _EdgeCount;
+        header.regionCount = _RegionCount;
+        header.boundsMin = _BoundsMin;
+        header.flags = _Closed != 0 ? 2 : 1;
+        header.boundsMax = _BoundsMax;
+        header.maxDegree = 12;
+        _Header[0] = header;
+
+        _DrawArgs.Store(0, _PrimitiveCount * 3);
+        _DrawArgs.Store(4, 1);
+        _DrawArgs.Store(8, 0);
+        _DrawArgs.Store(12, 0);
+        _DrawArgs.Store(16, 0);
+    }
+}

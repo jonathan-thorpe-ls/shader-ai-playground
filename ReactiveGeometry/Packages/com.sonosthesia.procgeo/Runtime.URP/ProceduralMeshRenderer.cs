@@ -12,13 +12,18 @@ namespace Sonosthesia.ProcGeo
     {
         [SerializeField, Min(1)] private int frequency = 4;
         [SerializeField, Min(0.001f)] private float radius = 1f;
+        [SerializeField] private GeneratorKind generatorKind = GeneratorKind.Icosphere;
+        [SerializeField] private ParametricGeometryType parametricType =
+            ParametricGeometryType.Plane;
+        [SerializeField] private ParametricGeometrySettings parametricSettings =
+            ParametricGeometrySettings.Default;
         [SerializeField] private Color color = new(0.2f, 0.6f, 1f, 1f);
         [SerializeField] private bool simulationEnabled = true;
         [SerializeField] private SimulationParameters simulationParameters = SimulationParameters.Nominal;
         [SerializeField] private GeometryFieldSettings fieldSettings = GeometryFieldSettings.Default;
 
         private GeometryResource _resource;
-        private IcosphereGenerator _generator;
+        private IGeometryGenerator _generator;
         private GeometryCommandScheduler _scheduler;
         private NeighbourSimulation _simulation;
         private FieldAccumulator _fields;
@@ -32,6 +37,8 @@ namespace Sonosthesia.ProcGeo
         private string _parameterWarning;
         private SimulationParameters _validatedParameters;
         private Bounds _restBounds;
+        private readonly List<IGeometryField> _externalFields = new();
+        private float _simulationTime;
 
         public int VertexCount => _resource?.Layout.VertexCount ?? 0;
         public int TriangleCount => _resource?.Layout.PrimitiveCount ?? 0;
@@ -42,8 +49,11 @@ namespace Sonosthesia.ProcGeo
         public SimulationParameters Parameters => _validatedParameters;
         public string ParameterWarning => _parameterWarning;
         public GeometryFieldSettings FieldSettings => fieldSettings;
+        public GeneratorKind SelectedGeneratorKind => generatorKind;
+        public ParametricGeometryType ParametricType => parametricType;
         public int LastSimulationStepCount => _simulationScheduler?.LastStepCount ?? 0;
         public float LastDroppedSimulationTime => _simulationScheduler?.LastDroppedTime ?? 0f;
+        public float SimulationTime => _simulationTime;
         public bool SimulationEnabled
         {
             get => simulationEnabled;
@@ -59,8 +69,20 @@ namespace Sonosthesia.ProcGeo
 
         public void SetIcosphereSettings(int newFrequency, float newRadius)
         {
+            generatorKind = GeneratorKind.Icosphere;
             frequency = Mathf.Max(1, newFrequency);
             radius = Mathf.Max(0.001f, newRadius);
+            if (isActiveAndEnabled)
+                Generate();
+        }
+
+        public void SetParametricSettings(
+            ParametricGeometryType type,
+            ParametricGeometrySettings settings)
+        {
+            generatorKind = GeneratorKind.Parametric;
+            parametricType = type;
+            parametricSettings = settings;
             if (isActiveAndEnabled)
                 Generate();
         }
@@ -83,9 +105,13 @@ namespace Sonosthesia.ProcGeo
         {
             frequency = Mathf.Max(1, frequency);
             radius = Mathf.Max(0.001f, radius);
-            bool geometryChanged = _resource != null &&
-                (_resource.Layout.VertexCount != new IcospherePlanInfo(frequency).VertexCount ||
-                 !Mathf.Approximately(_restBounds.extents.x, radius));
+            bool geometryChanged = _resource != null && (
+                generatorKind == GeneratorKind.Icosphere
+                    ? _resource.Layout.VertexCount !=
+                        new IcospherePlanInfo(frequency).VertexCount ||
+                      !Mathf.Approximately(_restBounds.extents.x, radius)
+                    : !_resource.Layout.Name.EndsWith(
+                        parametricType.ToString(), StringComparison.Ordinal));
             ValidateSimulationParameters();
             if (isActiveAndEnabled && geometryChanged)
                 _pendingRegeneration = true;
@@ -115,7 +141,8 @@ namespace Sonosthesia.ProcGeo
                     direction = transform.InverseTransformDirection(
                         fieldSettings.directionalDirection.normalized),
                     pulseWeight = fieldSettings.pulseWeight,
-                    directionalWeight = fieldSettings.directionalWeight
+                    directionalWeight = fieldSettings.directionalWeight,
+                    simulationTime = _simulationTime
                 });
             }
 
@@ -123,6 +150,7 @@ namespace Sonosthesia.ProcGeo
             if (steps == 0) return;
 
             _simulation.RecordFixedSteps(steps, _validatedParameters);
+            _simulationTime += steps * _validatedParameters.fixedDeltaTime;
             _resource.MarkUpdated(ExpandedBounds());
         }
 
@@ -137,7 +165,10 @@ namespace Sonosthesia.ProcGeo
             Release();
             try
             {
-                _generator = new IcosphereGenerator(frequency, radius);
+                _generator = generatorKind == GeneratorKind.Icosphere
+                    ? new IcosphereGenerator(frequency, radius)
+                    : new ParametricGeometryGenerator(
+                        parametricType, parametricSettings);
                 _resource = new GeometryResource(_generator.Plan());
                 _scheduler = new GeometryCommandScheduler($"ProcGeo Generate {name}");
                 TopologyBuilder topology = new();
@@ -185,7 +216,8 @@ namespace Sonosthesia.ProcGeo
                     _material.SetColor("_BaseColor", color);
                 _renderer.sharedMaterial = _material;
                 Debug.Log(
-                    $"Generated {_resource.Layout.VertexCount} vertices and {_resource.Layout.PrimitiveCount} triangles for {name}.",
+                    $"Generated {_resource.Layout.VertexCount} vertices and " +
+                    $"{_resource.Layout.PrimitiveCount} triangles for {name}.",
                     this);
             }
             catch
@@ -206,6 +238,20 @@ namespace Sonosthesia.ProcGeo
             fieldSettings = settings;
             if (_resource != null && simulationEnabled)
                 RebuildFields();
+        }
+
+        public void RegisterField(IGeometryField field)
+        {
+            if (field == null) throw new ArgumentNullException(nameof(field));
+            if (_externalFields.Contains(field)) return;
+            _externalFields.Add(field);
+            RebuildFields();
+        }
+
+        public void UnregisterField(IGeometryField field)
+        {
+            if (!_externalFields.Remove(field)) return;
+            RebuildFields();
         }
 
         public void SetDebugAttribute(AttributeId attribute, float minimum, float maximum)
@@ -255,6 +301,7 @@ namespace Sonosthesia.ProcGeo
         {
             _simulation?.Reset();
             _simulationScheduler?.Reset();
+            _simulationTime = 0f;
             if (_resource != null && _simulation != null)
                 _resource.MarkUpdated(ExpandedBounds());
         }
@@ -266,6 +313,7 @@ namespace Sonosthesia.ProcGeo
             SimulationParameters single = _validatedParameters;
             single.paused = false;
             _simulation.RecordFixedSteps(1, single);
+            _simulationTime += _validatedParameters.fixedDeltaTime;
             _resource.MarkUpdated(ExpandedBounds());
         }
 
@@ -327,22 +375,30 @@ namespace Sonosthesia.ProcGeo
             _fields = null;
             _graphDistance?.Dispose();
             _graphDistance = null;
-            if (!fieldSettings.fieldsEnabled || !simulationEnabled || _resource == null)
+            if ((!fieldSettings.fieldsEnabled && _externalFields.Count == 0) ||
+                !simulationEnabled || _resource == null)
             {
                 return;
             }
 
-            fieldSettings.graphSourceVertex = Mathf.Clamp(
-                fieldSettings.graphSourceVertex, 0, _resource.Layout.VertexCount - 1);
-            _graphDistance = new GraphDistanceOperator(
-                new[] { fieldSettings.graphSourceVertex },
-                Mathf.Max(8, frequency * 8));
-            _graphDistance.Execute(_resource);
             List<IGeometryField> fields = new();
-            if (fieldSettings.pulseEnabled)
-                fields.Add(new GraphPulseField());
-            if (fieldSettings.directionalEnabled)
-                fields.Add(new DirectionalField());
+            if (fieldSettings.fieldsEnabled)
+            {
+                fieldSettings.graphSourceVertex = Mathf.Clamp(
+                    fieldSettings.graphSourceVertex,
+                    0, _resource.Layout.VertexCount - 1);
+                _graphDistance = new GraphDistanceOperator(
+                    new[] { fieldSettings.graphSourceVertex },
+                    Mathf.Max(8, _resource.Layout.MaxSortDegree *
+                        Mathf.CeilToInt(Mathf.Sqrt(_resource.Layout.VertexCount))));
+                _graphDistance.Execute(_resource);
+                if (fieldSettings.pulseEnabled)
+                    fields.Add(new GraphPulseField());
+                if (fieldSettings.directionalEnabled)
+                    fields.Add(new DirectionalField());
+            }
+            fields.AddRange(_externalFields);
+            if (fields.Count == 0) return;
             _fields = new FieldAccumulator(_resource, fields);
         }
 
@@ -377,6 +433,12 @@ namespace Sonosthesia.ProcGeo
             if (simulationEnabled)
                 bounds.Expand(_validatedParameters.maximumDisplacement * 2f);
             return bounds;
+        }
+
+        public enum GeneratorKind
+        {
+            Icosphere,
+            Parametric
         }
 
         private readonly struct IcospherePlanInfo
