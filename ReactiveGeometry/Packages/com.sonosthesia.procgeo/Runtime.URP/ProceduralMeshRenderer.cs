@@ -13,6 +13,7 @@ namespace Sonosthesia.ProcGeo
         [SerializeField, Min(1)] private int frequency = 4;
         [SerializeField, Min(0.001f)] private float radius = 1f;
         [SerializeField] private GeneratorKind generatorKind = GeneratorKind.Icosphere;
+        [SerializeField] private bool autoGenerate;
         [SerializeField] private ParametricGeometryType parametricType =
             ParametricGeometryType.Plane;
         [SerializeField] private ParametricGeometrySettings parametricSettings =
@@ -36,6 +37,7 @@ namespace Sonosthesia.ProcGeo
         private bool _pendingRegeneration;
         private string _parameterWarning;
         private SimulationParameters _validatedParameters;
+        private GeneratorConfiguration _generatedConfiguration;
         private Bounds _restBounds;
         private readonly List<IGeometryField> _externalFields = new();
         private float _simulationTime;
@@ -105,16 +107,11 @@ namespace Sonosthesia.ProcGeo
         {
             frequency = Mathf.Max(1, frequency);
             radius = Mathf.Max(0.001f, radius);
-            bool geometryChanged = _resource != null && (
-                generatorKind == GeneratorKind.Icosphere
-                    ? _resource.Layout.VertexCount !=
-                        new IcospherePlanInfo(frequency).VertexCount ||
-                      !Mathf.Approximately(_restBounds.extents.x, radius)
-                    : !_resource.Layout.Name.EndsWith(
-                        parametricType.ToString(), StringComparison.Ordinal));
+            bool geometryChanged = _resource != null &&
+                !CurrentConfiguration().Matches(_generatedConfiguration);
             ValidateSimulationParameters();
-            if (isActiveAndEnabled && geometryChanged)
-                _pendingRegeneration = true;
+            if (isActiveAndEnabled)
+                _pendingRegeneration = autoGenerate && geometryChanged;
         }
 
         private void Update()
@@ -196,6 +193,7 @@ namespace Sonosthesia.ProcGeo
                 }
 
                 ValidateSimulationParameters();
+                _generatedConfiguration = CurrentConfiguration();
                 _restBounds = _resource.Mesh.bounds;
                 if (simulationEnabled)
                 {
@@ -441,14 +439,38 @@ namespace Sonosthesia.ProcGeo
             Parametric
         }
 
-        private readonly struct IcospherePlanInfo
-        {
-            public readonly int VertexCount;
+        private GeneratorConfiguration CurrentConfiguration() =>
+            new(generatorKind, frequency, radius, parametricType, parametricSettings);
 
-            public IcospherePlanInfo(int value)
+        private readonly struct GeneratorConfiguration
+        {
+            public readonly GeneratorKind Kind;
+            public readonly int Frequency;
+            public readonly float Radius;
+            public readonly ParametricGeometryType ParametricType;
+            public readonly ParametricGeometrySettings ParametricSettings;
+
+            public GeneratorConfiguration(
+                GeneratorKind generatorKind,
+                int frequency,
+                float radius,
+                ParametricGeometryType parametricType,
+                ParametricGeometrySettings parametricSettings)
             {
-                VertexCount = 10 * value * value + 2;
+                Kind = generatorKind;
+                Frequency = frequency;
+                Radius = radius;
+                ParametricType = parametricType;
+                ParametricSettings = parametricSettings;
             }
+
+            public bool Matches(GeneratorConfiguration other) =>
+                Kind == other.Kind &&
+                (Kind == GeneratorKind.Icosphere
+                    ? Frequency == other.Frequency &&
+                      Mathf.Approximately(Radius, other.Radius)
+                    : ParametricType == other.ParametricType &&
+                      ParametricSettings.Equals(other.ParametricSettings));
         }
     }
 }
