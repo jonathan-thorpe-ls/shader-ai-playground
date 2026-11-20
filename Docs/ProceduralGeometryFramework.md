@@ -45,6 +45,7 @@ Geometry generation, simulation, audio analysis, interaction, and rendering rema
 - Audio analysis and configurable response mapping.
 - Typed geometry attributes across multiple domains.
 - Reusable deformation and interaction fields.
+- Rest-path, path-frame and rigid-cross-section deformation contracts.
 - URP mesh-bridge and procedural/indirect rendering.
 - Runtime visualisation, validation, profiling and leak checks.
 - Provider-independent XR hand/controller interaction.
@@ -121,6 +122,7 @@ Geometry generation, simulation, audio analysis, interaction, and rendering rema
 | Resource core | Buffer capacities, aliases, ownership and disposal | Generator-specific behaviour |
 | Attribute system | Typed descriptors, availability and shader binding | Implicit interpretation of same-format data |
 | Simulation | Forces, integration, constraints, propagation and normals | Knowledge of how geometry was generated |
+| Path deformation | Deformable path samples, transported frames and extruded-vertex reconstruction | Tube-specific simulation or mesh generation |
 | Audio | FFT bands, RMS, onset and smoothing | Direct geometry mutation |
 | Interaction | Tracking interpretation, sources, volumes and gestures | Generator-specific force laws |
 | Rendering | Material access, draw scheduling and view-dependent work | Simulation decisions |
@@ -278,6 +280,7 @@ Representative fields:
 | Curvature response | curvature and sensitivity |
 | Audio band response | audio values and generated sensitivity weights |
 | Interaction field | XR source volumes and geometry response metadata |
+| Path deformation field | path source, controls, path state and deformation weights |
 
 Each field declares:
 
@@ -291,6 +294,14 @@ Blend:
 ```
 
 Physical fields should normally contribute acceleration or constraints. Direct position offsets are reserved for controlled visual-only effects.
+
+Tube-like structures may also use a reusable **path deformation layer**. A path
+is a canonical sequence of samples with arc-length, tangent, transported-frame
+and closure metadata. Tube vertices retain coordinates relative to that path;
+deforming the path reconstructs their positions in the deformed frame without
+changing the cross-section, radial coordinates, vertex count or connectivity.
+Path deformation is independent of the source curve used during generation and
+is the basis for later bend, twist, wave, constraint, audio and XR controls.
 
 ## 8. Geometry generators
 
@@ -577,7 +588,7 @@ cost, GPU work where available, dispatch count, buffer sizes, allocation churn,
 substep count and dropped simulation time. Regression is measured against the
 same representative scenes and presets.
 
-Performance work is not deferred until Phase 8. Phase 8 consolidates
+Performance work is not deferred until Phase 9. Phase 9 consolidates
 cross-backend baselines, tooling and final polish; each earlier phase must prove
 that its new runtime path is viable at real time. Quality controls that add
 work must be bounded, preset-based or LOD-aware rather than allowing unchecked
@@ -644,13 +655,41 @@ scenes do not require elaborate runtime control panels.
 See the detailed implementation plan in
 [Phase4-SurfaceGeneratorsDynamicDeformation.md](Implementation/Phase4-SurfaceGeneratorsDynamicDeformation.md).
 
-### Phase 5 — Audio reactivity
+### Phase 5 — Fundamental path deformation
+
+Introduce path deformation as a first-class GPU subsystem:
+
+- canonical rest and live path resources;
+- arc-length sample lookup and open/closed path semantics;
+- parallel-transport frame reconstruction under path deformation;
+- tube skinning from path state and immutable cross-section coordinates;
+- optional vertex-level fields applied after skinning along the resulting live
+  normals or tangent basis;
+- bounded path forces, constraints and recovery;
+- composable bend, twist and longitudinal wave drivers;
+- explicit integration with existing simulation, rendering and metadata;
+- limits and tests that prove the path-skinned base cross-section remains
+  invariant and that optional vertex offsets follow the resulting live normals.
+
+Completion means a torus or knot can deform its centreline while its generated
+radial shape remains constant in the path-skinned base pose. Optional
+vertex-level deformation is then applied relative to that new pose, so it
+follows the resulting normals instead of the rest orientation. Later
+deformation systems can control path state without knowing how a tube was
+generated. This phase establishes the shared foundation rather than adding
+tube-specific one-off deformations.
+
+See the detailed implementation plan in
+[Phase5-FundamentalPathDeformation.md](Implementation/Phase5-FundamentalPathDeformation.md).
+
+### Phase 6 — Audio reactivity
 
 Add FFT/RMS/onset analysis, compact smoothed GPU parameters, and configurable
 audio mappings. Prove distinct bass, mid, high and onset responses across both
-the icosphere and Phase 4 surfaces while preserving simulation stability.
+the icosphere, Phase 4 surfaces and Phase 5 paths while preserving simulation
+stability.
 
-### Phase 6 — Graph and irregular generators
+### Phase 7 — Graph and irregular generators
 
 Add branching graphs, particle networks and eventually Voronoi:
 
@@ -661,11 +700,11 @@ Add branching graphs, particle networks and eventually Voronoi:
 - graph-aware wave propagation;
 - variable-count indirect work where required.
 
-### Phase 7 — VR interaction
+### Phase 8 — VR interaction
 
 Introduce provider-independent interaction sources, fields, events and grab constraints. Start with one fingertip touching/pushing a grid, then add pinch, hit, grab and two-hand interaction, with a spatial broad phase and haptics/feedback.
 
-### Phase 8 — Hardening and visual development
+### Phase 9 — Hardening and visual development
 
 Complete cross-backend tests, performance baselines, memory reports, render-graph integration, motion vectors, CI/GPU-agent coverage, samples, reference captures and user-facing editor tools.
 
@@ -682,13 +721,15 @@ Phase 3: Metadata operators, fields and debug tools
     |
 Phase 4: Surface generators and dynamic deformation
     |
-Phase 5: Audio control
+Phase 5: Fundamental path deformation
     |
-Phase 6: Graphs, particles and Voronoi
+Phase 6: Audio control
     |
-Phase 7: VR interaction
+Phase 7: Graphs, particles and Voronoi
     |
-Phase 8: Hardening, performance and polish
+Phase 8: VR interaction
+    |
+Phase 9: Hardening, performance and polish
 ```
 
 Do not add a later generator merely to provide a test for an unfinished solver. Use the simplest existing topology that proves the next architectural capability:

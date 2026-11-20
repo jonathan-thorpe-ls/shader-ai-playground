@@ -38,7 +38,7 @@ Current deliberate implementation limits:
   GPU picker;
 - debug topology snapshots are regenerated when the relevant overlay is enabled and are
   not updated every simulation frame;
-- GPU timing and cross-backend baselines remain hardening data for Phase 8.
+- GPU timing and cross-backend baselines remain hardening data for Phase 9.
 
 ---
 
