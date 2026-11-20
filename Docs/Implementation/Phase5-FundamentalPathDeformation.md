@@ -14,6 +14,29 @@ framework described in [ProceduralGeometryFramework.md](../ProceduralGeometryFra
 | UI for example/test scenes | UI Toolkit only, through simple component inspectors |
 | Testing | deterministic path/frame GPU tests, deformation invariants and PlayMode rendering |
 
+## Implementation status
+
+The Phase 5 vertical slice is implemented in `ReactiveGeometry/`:
+
+- immutable tube-to-path bindings generated from Phase 4 path frames;
+- GPU-owned rest/live path resources and arc-length data;
+- direct and bounded dynamic path deformation;
+- transported live frames and closed-path seam correction;
+- path-skinned base positions, normals and tangents;
+- separate `IPathDeformer` and `IVertexDeformer` scheduler stages;
+- path offset, bend, twist, dynamic wave and vertex-normal authoring components;
+- optional Phase 4-compatible Constant/Inverse/Smoothstep spatial falloff for
+  every path and vertex deformer, with the component transform as source centre;
+- UI Toolkit component inspectors;
+- `Phase5/01_PathAndVertexDeformers` and
+  `Phase5/02_SpatialDeformerSources` functional test scenes;
+- EditMode invariant/lifecycle tests and a PlayMode renderer integration test.
+
+The first implementation intentionally limits the vertex stage to bounded
+normal-relative offsets. More advanced vertex solvers and additional authored
+stress scenes can extend the committed `IVertexDeformer` contract without
+changing path ownership or stage order.
+
 ## 1. Purpose
 
 Phase 4 generated tube surfaces around analytic and sampled curves. Phase 5
@@ -320,6 +343,12 @@ A vertex deformer:
   base-pose contract;
 - must not replace or mutate immutable rest metadata used by the path binding.
 
+Path and vertex deformers may optionally declare a
+`SpatialSourceParameters` target. When enabled, the component transform is the
+world-space source centre, converted to the renderer's local space for the GPU
+dispatch. Constant, inverse and smoothstep falloff match the Phase 4 spatial
+field semantics. Disabled spatial source means the deformer applies uniformly.
+
 Normal, tangent and binormal vertex effects are evaluated from the
 path-skinned basis. A component that needs to deform both the path and its
 surface is two explicitly ordered components: one path deformer followed by
@@ -505,20 +534,24 @@ Use simple UI Toolkit component inspectors on GameObjects:
 - expose wave amplitude, frequency, speed and path direction;
 - expose optional vertex-normal offset fields and clearly distinguish them from
   path deformation;
+- expose spatial falloff enablement, inner/outer radius, weight and mode;
+- draw source gizmos for inner and outer radii;
 - expose twist, fixed constraints and reset;
 - provide one-shot apply, pause and reset actions;
 - display validation messages for missing path metadata or incompatible
   cross-section bindings.
 
-Proposed scenes:
+Implemented core scenes:
 
 ```text
-Phase5_00_OpenPathBend.unity
-Phase5_01_ClosedTorusWave.unity
-Phase5_02_KnotTwistAndBend.unity
-Phase5_03_SecondarySurface.unity
-Phase5_04_PathStressPresets.unity
+01_PathAndVertexDeformers.unity
+02_SpatialDeformerSources.unity
 ```
+
+The second scene keeps the renderer and every deformer on separate GameObjects.
+Each deformer targets the shared renderer and uses its own transform position as
+the spatial falloff centre. Additional open-path, stress and secondary-surface
+scenes remain later authoring additions.
 
 Scene view visualisation should draw rest path, live path, tangents and the
 selected frame basis. It may sample a one-off GPU snapshot explicitly for

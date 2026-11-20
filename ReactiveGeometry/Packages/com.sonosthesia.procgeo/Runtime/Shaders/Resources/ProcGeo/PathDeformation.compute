@@ -1,0 +1,432 @@
+#pragma kernel ClearPath
+#pragma kernel AddPathOffset
+#pragma kernel AddPathBend
+#pragma kernel AddPathWave
+#pragma kernel AddPathTwist
+#pragma kernel AddDynamicPathWave
+#pragma kernel BuildPathFrames
+#pragma kernel SkinPathGeometry
+#pragma kernel ClearVertexOffsets
+#pragma kernel AddVertexNormalOffset
+#pragma kernel ComposeVertexPositions
+#pragma kernel RecomputeFinalNormals
+#pragma kernel PublishPathGeometry
+
+StructuredBuffer<float3> _RestPathPositions;
+StructuredBuffer<float> _RestPathDistances;
+StructuredBuffer<float3> _RestPathTangents;
+StructuredBuffer<float3> _RestPathNormals;
+StructuredBuffer<float3> _RestPathBinormals;
+RWStructuredBuffer<float3> _PathContributions;
+RWStructuredBuffer<float> _PathTwists;
+RWStructuredBuffer<float3> _LivePathPositions;
+RWStructuredBuffer<float3> _LivePathTangents;
+RWStructuredBuffer<float3> _LivePathNormals;
+RWStructuredBuffer<float3> _LivePathBinormals;
+RWStructuredBuffer<float3> _LivePathVelocities;
+RWStructuredBuffer<float3> _PathForces;
+
+StructuredBuffer<uint> _VertexPathIndices;
+StructuredBuffer<float> _VertexPathBlends;
+StructuredBuffer<float2> _CrossSections;
+RWStructuredBuffer<float3> _BasePositions;
+RWStructuredBuffer<float3> _BaseNormals;
+RWStructuredBuffer<float3> _BaseTangents;
+RWStructuredBuffer<float3> _VertexOffsets;
+RWStructuredBuffer<float3> _FinalPositions;
+RWStructuredBuffer<float3> _FinalNormals;
+
+ByteAddressBuffer _Indices;
+StructuredBuffer<uint> _VertexFaceOffsets;
+StructuredBuffer<uint> _VertexFaces;
+RWByteAddressBuffer _DynamicVertices;
+RWByteAddressBuffer _StaticVertices;
+
+uint _PathSampleCount;
+uint _PathClosed;
+uint _VertexCount;
+float _Epsilon;
+float3 _PathOffset;
+float3 _BendPivot;
+float3 _BendAxis;
+float _BendAngle;
+float _BendFalloffStart;
+float _BendFalloffEnd;
+float3 _WaveDirection;
+float _WaveAmplitude;
+float _WaveFrequency;
+float _WaveSpeed;
+float _WavePhase;
+float _Time;
+float _Twist;
+float _TwistMaskStart;
+float _TwistMaskEnd;
+uint _PathDynamic;
+float _PathDeltaTime;
+float _PathRestoring;
+float _PathDamping;
+float _PathMaximumVelocity;
+float _PathMaximumDisplacement;
+float _VertexNormalAmplitude;
+float _VertexWaveFrequency;
+float _VertexWaveSpeed;
+float _VertexWavePhase;
+float3 _SourceCenter;
+float _InnerRadius;
+float _OuterRadius;
+float _SourceWeight;
+int _FalloffMode;
+int _SourceEnabled;
+
+static const uint DYNAMIC_VERTEX_STRIDE = 24;
+static const uint STATIC_VERTEX_STRIDE = 24;
+
+float3 RotateAroundAxis(float3 value, float3 axis, float angle)
+{
+    float sine;
+    float cosine;
+    sincos(angle, sine, cosine);
+    return value * cosine + cross(axis, value) * sine +
+        axis * dot(axis, value) * (1.0 - cosine);
+}
+
+float SmoothMask(float t, float start, float end)
+{
+    if (end <= start + 0.0001)
+        return 1.0;
+    return 1.0 - smoothstep(start, end, t);
+}
+
+float SpatialFalloff(float distanceFromSource)
+{
+    if (_SourceEnabled == 0)
+        return 1.0;
+    if (distanceFromSource >= _OuterRadius)
+        return 0.0;
+    float t = saturate((distanceFromSource - _InnerRadius) /
+        max(_OuterRadius - _InnerRadius, 1e-5));
+    float falloff;
+    if (_FalloffMode == 0)
+        falloff = 1.0;
+    else if (_FalloffMode == 1)
+        falloff = 1.0 - smoothstep(0.0, 1.0, t);
+    else
+        falloff = 1.0 - smoothstep(
+            _InnerRadius, _OuterRadius, distanceFromSource);
+    return falloff * _SourceWeight;
+}
+
+[numthreads(64, 1, 1)]
+void ClearPath(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _PathSampleCount)
+        return;
+    _PathContributions[id] = 0.0;
+    _PathTwists[id] = 0.0;
+    _PathForces[id] = 0.0;
+}
+
+[numthreads(64, 1, 1)]
+void AddPathOffset(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id < _PathSampleCount)
+        _PathContributions[id] += _PathOffset *
+            SpatialFalloff(distance(_RestPathPositions[id], _SourceCenter));
+}
+
+[numthreads(64, 1, 1)]
+void AddPathBend(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _PathSampleCount)
+        return;
+    float t = _PathSampleCount > 1 ? float(id) / float(_PathSampleCount - 1) : 0.0;
+    float mask = SmoothMask(t, _BendFalloffStart, _BendFalloffEnd);
+    float3 axis = normalize(_BendAxis + float3(_Epsilon, 0.0, 0.0));
+    float3 arm = _RestPathPositions[id] - _BendPivot;
+    float3 bent = RotateAroundAxis(arm, axis, _BendAngle * mask) + _BendPivot;
+    _PathContributions[id] += (bent - _RestPathPositions[id]) *
+        SpatialFalloff(distance(_RestPathPositions[id], _SourceCenter));
+}
+
+[numthreads(64, 1, 1)]
+void AddPathWave(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _PathSampleCount)
+        return;
+    float arcDistance = _RestPathDistances[id];
+    float phase = _WavePhase + _Time * _WaveSpeed -
+        arcDistance * _WaveFrequency;
+    float3 direction = normalize(_WaveDirection + float3(_Epsilon, 0.0, 0.0));
+    _PathContributions[id] += direction * (sin(phase) * _WaveAmplitude *
+        SpatialFalloff(distance(_RestPathPositions[id], _SourceCenter)));
+}
+
+[numthreads(64, 1, 1)]
+void AddPathTwist(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _PathSampleCount)
+        return;
+    float t = _PathSampleCount > 1 ? float(id) / float(_PathSampleCount - 1) : 0.0;
+    float mask = SmoothMask(t, _TwistMaskStart, _TwistMaskEnd);
+    _PathTwists[id] += _Twist * mask *
+        SpatialFalloff(distance(_RestPathPositions[id], _SourceCenter));
+}
+
+[numthreads(64, 1, 1)]
+void AddDynamicPathWave(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _PathSampleCount)
+        return;
+    float arcDistance = _RestPathDistances[id];
+    float phase = _WavePhase + _Time * _WaveSpeed -
+        arcDistance * _WaveFrequency;
+    float3 direction = normalize(_WaveDirection + float3(_Epsilon, 0.0, 0.0));
+    _PathForces[id] += direction * (sin(phase) * _WaveAmplitude *
+        SpatialFalloff(distance(_RestPathPositions[id], _SourceCenter)));
+}
+
+[numthreads(1, 1, 1)]
+void BuildPathFrames(uint3 dispatchId : SV_DispatchThreadID)
+{
+    if (dispatchId.x != 0)
+        return;
+    uint count = _PathSampleCount;
+    bool identity = true;
+    for (uint i = 0; i < count; i++)
+    {
+        float3 contribution = _PathContributions[i];
+        if (any(isnan(contribution)) || any(isinf(contribution)))
+            contribution = 0.0;
+        else if (length(contribution) > _PathMaximumDisplacement)
+            contribution = normalize(contribution) * _PathMaximumDisplacement;
+        _PathContributions[i] = contribution;
+        if (_PathDynamic != 0)
+        {
+            float3 offset = _LivePathPositions[i] - _RestPathPositions[i];
+            float3 pathForce = _PathForces[i];
+            if (any(isnan(pathForce)) || any(isinf(pathForce)))
+                pathForce = 0.0;
+            pathForce = length(pathForce) > 100.0
+                ? normalize(pathForce) * 100.0
+                : pathForce;
+            float3 acceleration = pathForce +
+                (contribution - offset) * _PathRestoring -
+                _LivePathVelocities[i] * _PathDamping;
+            float3 velocity = _LivePathVelocities[i] +
+                acceleration * _PathDeltaTime;
+            velocity = length(velocity) > _PathMaximumVelocity
+                ? normalize(velocity) * _PathMaximumVelocity
+                : velocity;
+            float3 nextOffset = offset + velocity * _PathDeltaTime;
+            nextOffset = length(nextOffset) > _PathMaximumDisplacement
+                ? normalize(nextOffset) * _PathMaximumDisplacement
+                : nextOffset;
+            _LivePathVelocities[i] = velocity;
+            _LivePathPositions[i] = _RestPathPositions[i] + nextOffset;
+        }
+        else
+        {
+            _LivePathPositions[i] =
+                _RestPathPositions[i] + contribution;
+            _LivePathVelocities[i] = 0.0;
+        }
+        if (dot(contribution, contribution) >
+                _Epsilon * _Epsilon ||
+            abs(_PathTwists[i]) > _Epsilon)
+        {
+            identity = false;
+        }
+    }
+    if (identity && _PathDynamic == 0)
+    {
+        for (uint restIndex = 0; restIndex < count; restIndex++)
+        {
+            _LivePathTangents[restIndex] = _RestPathTangents[restIndex];
+            _LivePathNormals[restIndex] = _RestPathNormals[restIndex];
+            _LivePathBinormals[restIndex] = _RestPathBinormals[restIndex];
+        }
+        return;
+    }
+
+    for (uint tangentIndex = 0; tangentIndex < count; tangentIndex++)
+    {
+        uint previous = tangentIndex == 0
+            ? (_PathClosed != 0 ? count - 1 : 0)
+            : tangentIndex - 1;
+        uint next = tangentIndex + 1 >= count
+            ? (_PathClosed != 0 ? 0 : count - 1)
+            : tangentIndex + 1;
+        float3 tangent = _LivePathPositions[next] - _LivePathPositions[previous];
+        if (dot(tangent, tangent) <= _Epsilon)
+            tangent = _RestPathTangents[tangentIndex];
+        _LivePathTangents[tangentIndex] = normalize(tangent);
+    }
+
+    for (uint frameIndex = 0; frameIndex < count; frameIndex++)
+    {
+        float3 normal;
+        if (frameIndex == 0)
+        {
+            normal = _RestPathNormals[0] -
+                _LivePathTangents[0] *
+                dot(_RestPathNormals[0], _LivePathTangents[0]);
+        }
+        else
+        {
+            normal = _LivePathNormals[frameIndex - 1] -
+                _LivePathTangents[frameIndex] *
+                dot(_LivePathNormals[frameIndex - 1],
+                    _LivePathTangents[frameIndex]);
+        }
+        if (dot(normal, normal) <= _Epsilon)
+        {
+            float3 helper = abs(dot(
+                _LivePathTangents[frameIndex], float3(0.0, 1.0, 0.0))) > 0.95
+                ? float3(1.0, 0.0, 0.0)
+                : float3(0.0, 1.0, 0.0);
+            normal = cross(_LivePathTangents[frameIndex], helper);
+        }
+        normal = normalize(RotateAroundAxis(
+            normalize(normal),
+            _LivePathTangents[frameIndex],
+            _PathTwists[frameIndex]));
+        _LivePathNormals[frameIndex] = normal;
+        _LivePathBinormals[frameIndex] = normalize(cross(
+            _LivePathTangents[frameIndex], normal));
+    }
+
+    if (_PathClosed != 0 && count > 2)
+    {
+        float3 tangent = _LivePathTangents[0];
+        float3 transported = _LivePathNormals[count - 1] -
+            tangent * dot(_LivePathNormals[count - 1], tangent);
+        if (dot(transported, transported) > _Epsilon)
+        {
+            transported = normalize(transported);
+            float seamAngle = atan2(
+                dot(tangent, cross(transported, _LivePathNormals[0])),
+                dot(transported, _LivePathNormals[0]));
+            for (uint correctionIndex = 1;
+                correctionIndex < count;
+                correctionIndex++)
+            {
+                float t = float(correctionIndex) / float(count - 1);
+                float3 corrected = RotateAroundAxis(
+                    _LivePathNormals[correctionIndex],
+                    _LivePathTangents[correctionIndex],
+                    seamAngle * t);
+                _LivePathNormals[correctionIndex] = normalize(corrected);
+                _LivePathBinormals[correctionIndex] = normalize(cross(
+                    _LivePathTangents[correctionIndex], corrected));
+            }
+        }
+    }
+}
+
+[numthreads(64, 1, 1)]
+void SkinPathGeometry(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _VertexCount)
+        return;
+    uint first = _VertexPathIndices[id];
+    uint next = first + 1;
+    if (next >= _PathSampleCount)
+        next = _PathClosed != 0 ? 0 : _PathSampleCount - 1;
+    float blend = saturate(_VertexPathBlends[id]);
+    float3 centre = lerp(
+        _LivePathPositions[first], _LivePathPositions[next], blend);
+    float3 tangent = normalize(lerp(
+        _LivePathTangents[first], _LivePathTangents[next], blend));
+    float3 normal = normalize(lerp(
+        _LivePathNormals[first], _LivePathNormals[next], blend));
+    normal = normalize(normal - tangent * dot(normal, tangent));
+    float3 binormal = normalize(cross(tangent, normal));
+    float2 section = _CrossSections[id];
+    float3 radial = normal * section.x + binormal * section.y;
+    float3 baseNormal = normalize(radial);
+    if (dot(baseNormal, baseNormal) <= _Epsilon)
+        baseNormal = normal;
+    _BasePositions[id] = centre + radial;
+    _BaseNormals[id] = baseNormal;
+    _BaseTangents[id] = tangent;
+}
+
+[numthreads(64, 1, 1)]
+void ClearVertexOffsets(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id < _VertexCount)
+        _VertexOffsets[id] = 0.0;
+}
+
+[numthreads(64, 1, 1)]
+void AddVertexNormalOffset(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _VertexCount)
+        return;
+    float phase = _VertexWavePhase + _Time * _VertexWaveSpeed +
+        float(id) * _VertexWaveFrequency;
+    float amplitude = _VertexNormalAmplitude;
+    if (isnan(amplitude) || isinf(amplitude))
+        amplitude = 0.0;
+    else
+        amplitude = clamp(amplitude, -2.0, 2.0);
+    _VertexOffsets[id] += _BaseNormals[id] * (amplitude * sin(phase) *
+        SpatialFalloff(distance(_BasePositions[id], _SourceCenter)));
+}
+
+[numthreads(64, 1, 1)]
+void ComposeVertexPositions(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id < _VertexCount)
+        _FinalPositions[id] = _BasePositions[id] + _VertexOffsets[id];
+}
+
+[numthreads(64, 1, 1)]
+void RecomputeFinalNormals(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint vertex = dispatchId.x;
+    if (vertex >= _VertexCount)
+        return;
+    uint start = _VertexFaceOffsets[vertex];
+    uint end = _VertexFaceOffsets[vertex + 1];
+    float3 sum = 0.0;
+    for (uint cursor = start; cursor < end; cursor++)
+    {
+        uint primitive = _VertexFaces[cursor];
+        uint3 indices = _Indices.Load3(primitive * 12);
+        float3 edgeA = _FinalPositions[indices.y] - _FinalPositions[indices.x];
+        float3 edgeB = _FinalPositions[indices.z] - _FinalPositions[indices.x];
+        float3 faceNormal = cross(edgeA, edgeB);
+        float lengthSquared = dot(faceNormal, faceNormal);
+        if (lengthSquared > _Epsilon)
+            sum += faceNormal * rsqrt(lengthSquared);
+    }
+    _FinalNormals[vertex] = dot(sum, sum) > _Epsilon
+        ? normalize(sum)
+        : _BaseNormals[vertex];
+}
+
+[numthreads(64, 1, 1)]
+void PublishPathGeometry(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _VertexCount)
+        return;
+    uint dynamicOffset = id * DYNAMIC_VERTEX_STRIDE;
+    _DynamicVertices.Store3(dynamicOffset, asuint(_FinalPositions[id]));
+    _DynamicVertices.Store3(dynamicOffset + 12, asuint(_FinalNormals[id]));
+    uint staticOffset = id * STATIC_VERTEX_STRIDE;
+    _StaticVertices.Store4(
+        staticOffset,
+        asuint(float4(_BaseTangents[id], 1.0)));
+}

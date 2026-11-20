@@ -197,6 +197,24 @@ namespace Sonosthesia.ProcGeo
         public Vector3[] DebugPositions => _data.Positions;
         public Vector3[] DebugNormals => _data.Normals;
         public Vector3Int[] DebugTriangles => _data.Triangles;
+        public bool IsTubeGeometry => IsTube(_type);
+
+        public PathGeometryData CreatePathGeometryData()
+        {
+            if (!IsTubeGeometry)
+                throw new InvalidOperationException(
+                    $"Geometry type '{_type}' does not have a source path.");
+            return new PathGeometryData(
+                _data.PathPositions,
+                _data.PathTangents,
+                _data.PathNormals,
+                _data.PathBinormals,
+                _data.PathDistances,
+                _data.PathClosed,
+                _data.VertexPathIndices,
+                _data.VertexPathBlends,
+                _data.CrossSectionPositions);
+        }
 
         public void Dispose()
         {
@@ -246,6 +264,43 @@ namespace Sonosthesia.ProcGeo
             Frame[] tubeFrames = tube
                 ? BuildTubeFrames(type, settings, wrapU, uCount)
                 : null;
+            Vector3[] pathPositions = tube
+                ? new Vector3[uCount]
+                : Array.Empty<Vector3>();
+            Vector3[] pathTangents = tube
+                ? new Vector3[uCount]
+                : Array.Empty<Vector3>();
+            Vector3[] pathNormals = tube
+                ? new Vector3[uCount]
+                : Array.Empty<Vector3>();
+            Vector3[] pathBinormals = tube
+                ? new Vector3[uCount]
+                : Array.Empty<Vector3>();
+            float[] pathDistances = tube
+                ? new float[uCount]
+                : Array.Empty<float>();
+            uint[] vertexPathIndices = tube
+                ? new uint[positions.Length]
+                : Array.Empty<uint>();
+            float[] vertexPathBlends = tube
+                ? new float[positions.Length]
+                : Array.Empty<float>();
+            Vector2[] crossSectionPositions = tube
+                ? new Vector2[positions.Length]
+                : Array.Empty<Vector2>();
+            float cumulativeDistance = 0f;
+            for (int pathIndex = 0; pathIndex < pathPositions.Length; pathIndex++)
+            {
+                Frame frame = tubeFrames[pathIndex];
+                pathPositions[pathIndex] = frame.Position;
+                pathTangents[pathIndex] = frame.Tangent;
+                pathNormals[pathIndex] = frame.Normal;
+                pathBinormals[pathIndex] = frame.Binormal;
+                if (pathIndex > 0)
+                    cumulativeDistance += Vector3.Distance(
+                        pathPositions[pathIndex - 1], pathPositions[pathIndex]);
+                pathDistances[pathIndex] = cumulativeDistance;
+            }
             for (int u = 0; u < uCount; u++)
             {
                 for (int v = 0; v < vCount; v++)
@@ -268,6 +323,13 @@ namespace Sonosthesia.ProcGeo
                         normal = (frame.Normal * Mathf.Cos(angle) +
                             frame.Binormal * Mathf.Sin(angle)).normalized;
                         tangent = frame.Tangent;
+                        Vector3 crossSection =
+                            p - frame.Position;
+                        vertexPathIndices[id] = (uint)u;
+                        vertexPathBlends[id] = 0f;
+                        crossSectionPositions[id] = new Vector2(
+                            Vector3.Dot(crossSection, frame.Normal),
+                            Vector3.Dot(crossSection, frame.Binormal));
                     }
                     else
                     {
@@ -349,7 +411,16 @@ namespace Sonosthesia.ProcGeo
             return new GeometryPlanData(
                 positions, normals, tangents, coordinates, triangles.ToArray(),
                 regions, edges.Count, maxDegree, Mathf.Max(1, settings.uSegments),
-                bounds);
+                bounds,
+                pathPositions,
+                pathTangents,
+                pathNormals,
+                pathBinormals,
+                pathDistances,
+                wrapU,
+                vertexPathIndices,
+                vertexPathBlends,
+                crossSectionPositions);
 
             void AddEdge(int source, int target)
             {
@@ -631,6 +702,15 @@ namespace Sonosthesia.ProcGeo
             public readonly int MaxDegree;
             public readonly int RegionCount;
             public readonly Bounds Bounds;
+            public readonly Vector3[] PathPositions;
+            public readonly Vector3[] PathTangents;
+            public readonly Vector3[] PathNormals;
+            public readonly Vector3[] PathBinormals;
+            public readonly float[] PathDistances;
+            public readonly bool PathClosed;
+            public readonly uint[] VertexPathIndices;
+            public readonly float[] VertexPathBlends;
+            public readonly Vector2[] CrossSectionPositions;
 
             public GeometryPlanData(
                 Vector3[] positions,
@@ -642,7 +722,16 @@ namespace Sonosthesia.ProcGeo
                 int edgeCount,
                 int maxDegree,
                 int regionCount,
-                Bounds bounds)
+                Bounds bounds,
+                Vector3[] pathPositions,
+                Vector3[] pathTangents,
+                Vector3[] pathNormals,
+                Vector3[] pathBinormals,
+                float[] pathDistances,
+                bool pathClosed,
+                uint[] vertexPathIndices,
+                float[] vertexPathBlends,
+                Vector2[] crossSectionPositions)
             {
                 Positions = positions;
                 Normals = normals;
@@ -654,6 +743,15 @@ namespace Sonosthesia.ProcGeo
                 MaxDegree = maxDegree;
                 RegionCount = regionCount;
                 Bounds = bounds;
+                PathPositions = pathPositions;
+                PathTangents = pathTangents;
+                PathNormals = pathNormals;
+                PathBinormals = pathBinormals;
+                PathDistances = pathDistances;
+                PathClosed = pathClosed;
+                VertexPathIndices = vertexPathIndices;
+                VertexPathBlends = vertexPathBlends;
+                CrossSectionPositions = crossSectionPositions;
             }
         }
     }

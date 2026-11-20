@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -30,6 +31,7 @@ namespace Sonosthesia.ProcGeo
         private FieldAccumulator _fields;
         private GraphDistanceOperator _graphDistance;
         private SimulationScheduler _simulationScheduler;
+        private PathDeformationPipeline _pathDeformation;
         private Material _material;
         private Material _debugMaterial;
         private MeshFilter _filter;
@@ -40,6 +42,8 @@ namespace Sonosthesia.ProcGeo
         private GeneratorConfiguration _generatedConfiguration;
         private Bounds _restBounds;
         private readonly List<IGeometryField> _externalFields = new();
+        private readonly List<IPathDeformer> _pathDeformers = new();
+        private readonly List<IVertexDeformer> _vertexDeformers = new();
         private float _simulationTime;
 
         public int VertexCount => _resource?.Layout.VertexCount ?? 0;
@@ -68,6 +72,7 @@ namespace Sonosthesia.ProcGeo
             }
         }
         public bool IsGenerated => _resource != null && _resource.Version > 0;
+        public PathDeformationPipeline PathDeformation => _pathDeformation;
 
         public void SetIcosphereSettings(int newFrequency, float newRadius)
         {
@@ -123,7 +128,18 @@ namespace Sonosthesia.ProcGeo
                 return;
             }
 
-            if (!Application.isPlaying || !simulationEnabled || _simulation == null)
+            if (!Application.isPlaying)
+                return;
+
+            if (_pathDeformation != null)
+            {
+                _pathDeformation.Record(
+                    _pathDeformers, _vertexDeformers, Time.deltaTime, Time.time);
+                _resource.MarkUpdated(ExpandedBounds());
+                return;
+            }
+
+            if (!simulationEnabled || _simulation == null)
                 return;
 
             if (_fields != null)
@@ -195,7 +211,14 @@ namespace Sonosthesia.ProcGeo
                 ValidateSimulationParameters();
                 _generatedConfiguration = CurrentConfiguration();
                 _restBounds = _resource.Mesh.bounds;
-                if (simulationEnabled)
+                RefreshDeformers();
+                if (_generator is ParametricGeometryGenerator parametric &&
+                    parametric.IsTubeGeometry)
+                {
+                    _pathDeformation = new PathDeformationPipeline(
+                        _resource, parametric.CreatePathGeometryData());
+                }
+                else if (simulationEnabled)
                 {
                     _simulation = new NeighbourSimulation(_resource);
                     _simulationScheduler = new SimulationScheduler();
@@ -352,6 +375,8 @@ namespace Sonosthesia.ProcGeo
             _simulation?.Dispose();
             _simulation = null;
             _simulationScheduler = null;
+            _pathDeformation?.Dispose();
+            _pathDeformation = null;
             _fields?.Dispose();
             _fields = null;
             _graphDistance?.Dispose();
@@ -428,9 +453,54 @@ namespace Sonosthesia.ProcGeo
         private Bounds ExpandedBounds()
         {
             Bounds bounds = _restBounds;
-            if (simulationEnabled)
+            if (_pathDeformation != null)
+                bounds.Expand(2f);
+            else if (simulationEnabled)
                 bounds.Expand(_validatedParameters.maximumDisplacement * 2f);
             return bounds;
+        }
+
+        public void ResetPathDeformation()
+        {
+            if (_pathDeformation == null)
+                throw new InvalidOperationException("The generated geometry is not path-bound.");
+            _pathDeformation.Reset();
+            _resource.MarkUpdated(ExpandedBounds());
+        }
+
+        public void RefreshDeformers()
+        {
+            MonoBehaviour[] behaviours = GetComponents<MonoBehaviour>();
+            foreach (IPathDeformer deformer in behaviours.OfType<IPathDeformer>())
+                RegisterPathDeformer(deformer);
+            foreach (IVertexDeformer deformer in behaviours.OfType<IVertexDeformer>())
+                RegisterVertexDeformer(deformer);
+        }
+
+        public void RegisterPathDeformer(IPathDeformer deformer)
+        {
+            if (deformer == null) throw new ArgumentNullException(nameof(deformer));
+            if (!_pathDeformers.Contains(deformer))
+                _pathDeformers.Add(deformer);
+        }
+
+        public void UnregisterPathDeformer(IPathDeformer deformer)
+        {
+            if (deformer != null)
+                _pathDeformers.Remove(deformer);
+        }
+
+        public void RegisterVertexDeformer(IVertexDeformer deformer)
+        {
+            if (deformer == null) throw new ArgumentNullException(nameof(deformer));
+            if (!_vertexDeformers.Contains(deformer))
+                _vertexDeformers.Add(deformer);
+        }
+
+        public void UnregisterVertexDeformer(IVertexDeformer deformer)
+        {
+            if (deformer != null)
+                _vertexDeformers.Remove(deformer);
         }
 
         public enum GeneratorKind

@@ -222,7 +222,7 @@ namespace Sonosthesia.ProcGeo
         }
     }
 
-    internal static class SpatialDeformationValidation
+    public static class SpatialDeformationValidation
     {
         public static void ValidateRequired(
             GeometryResource resource,
