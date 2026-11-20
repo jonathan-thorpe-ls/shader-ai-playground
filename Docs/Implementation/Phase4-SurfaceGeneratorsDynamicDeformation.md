@@ -42,7 +42,7 @@ contracts.
 
 ### 2.2 Explicitly out of scope
 
-- Audio analysis or audio mappings; these move to Phase 6.
+- Audio analysis or audio mappings; these move to Phase 7.
 - Runtime path deformation. Phase 4 emits path-compatible metadata, but
   changing a tube centreline and reconstructing its skin is Phase 5.
 - Branching graphs, particle networks or cell/Voronoi *geometry* generation.
@@ -777,6 +777,6 @@ Phase 4 is complete when:
     controls are documented;
 12. supported presets meet the documented real-time frame budget with bounded
     dispatch, memory and allocation behaviour;
-13. audio analysis remains absent and is left cleanly for Phase 6;
+13. audio analysis remains absent and is left cleanly for Phase 7;
 14. generated tubes expose the immutable path/frame/cross-section metadata
     required by the Phase 5 path-deformation contract.

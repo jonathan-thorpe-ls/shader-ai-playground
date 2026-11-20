@@ -682,23 +682,36 @@ tube-specific one-off deformations.
 See the detailed implementation plan in
 [Phase5-FundamentalPathDeformation.md](Implementation/Phase5-FundamentalPathDeformation.md).
 
-### Phase 6 — Audio reactivity
+### Phase 6 — Branching graphs
+
+Add deterministic rooted branching graphs and deformable branch geometry:
+
+- tree, fractal and other reusable branch-plan primitives;
+- branch paths based on the Phase 5 path contract;
+- hierarchy, parent/child and junction metadata;
+- root-anchored hierarchy propagation without disconnected branch starts;
+- deterministic graph metadata;
+- wind-like path turbulence and tip-weighted attraction;
+- lower/larger branches with reduced sensitivity and terminal tips with greater
+  flexibility;
+- line/glyph diagnostics followed by tube skins around branch paths.
+
+Completion means a deterministic tree-like graph can be generated, rendered and
+deformed without topology rebuilding, per-frame readback or per-vertex CPU
+work. The reusable graph/path primitives must support later roots, veins,
+corals, abstract networks and other authored branch rules without replacing the
+deformation pipeline. Particle networks and Voronoi remain later Phase 6
+extensions rather than gates for the branching vertical slice.
+
+See the detailed implementation plan in
+[Phase6-BranchingGraphs.md](Implementation/Phase6-BranchingGraphs.md).
+
+### Phase 7 — Audio reactivity
 
 Add FFT/RMS/onset analysis, compact smoothed GPU parameters, and configurable
-audio mappings. Prove distinct bass, mid, high and onset responses across both
-the icosphere, Phase 4 surfaces and Phase 5 paths while preserving simulation
-stability.
-
-### Phase 7 — Graph and irregular generators
-
-Add branching graphs, particle networks and eventually Voronoi:
-
-- line/point rendering;
-- deterministic graph metadata;
-- spatial-grid neighbour generation;
-- region and cell identity;
-- graph-aware wave propagation;
-- variable-count indirect work where required.
+audio mappings. Prove distinct bass, mid, high and onset responses across the
+icosphere, Phase 4 surfaces, Phase 5 paths and Phase 6 branch paths while
+preserving simulation stability.
 
 ### Phase 8 — VR interaction
 
@@ -723,9 +736,9 @@ Phase 4: Surface generators and dynamic deformation
     |
 Phase 5: Fundamental path deformation
     |
-Phase 6: Audio control
+Phase 6: Branching graphs and branch path deformation
     |
-Phase 7: Graphs, particles and Voronoi
+Phase 7: Audio control
     |
 Phase 8: VR interaction
     |
