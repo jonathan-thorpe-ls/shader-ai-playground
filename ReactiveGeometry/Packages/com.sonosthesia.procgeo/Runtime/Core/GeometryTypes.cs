@@ -86,6 +86,16 @@ namespace Sonosthesia.ProcGeo
         public static readonly AttributeId GraphDistance = new("GraphDistance");
         public static readonly AttributeId GraphDistance01 = new("GraphDistance01");
         public static readonly AttributeId DeformationWeight = new("DeformationWeight");
+        public static readonly AttributeId BranchId = new("BranchId");
+        public static readonly AttributeId DistanceFromRoot = new("DistanceFromRoot");
+        public static readonly AttributeId DistanceToTip = new("DistanceToTip");
+        public static readonly AttributeId LocalBranchDistance = new("LocalBranchDistance");
+        public static readonly AttributeId LocalBranchPosition = new("LocalBranchPosition");
+        public static readonly AttributeId GenerationDepth = new("GenerationDepth");
+        public static readonly AttributeId BranchRadius = new("BranchRadius");
+        public static readonly AttributeId TipWeight = new("TipWeight");
+        public static readonly AttributeId BranchFlexibility = new("BranchFlexibility");
+        public static readonly AttributeId BranchStiffness = new("BranchStiffness");
     }
 
     public sealed class AttributeDescriptor

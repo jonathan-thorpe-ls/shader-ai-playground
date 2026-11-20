@@ -16,6 +16,31 @@ GPU procedural-geometry framework described in
 | UI | Simple functional UI Toolkit component inspectors |
 | Testing | deterministic plans, GPU invariants, deformation tests, lifecycle and PlayMode rendering |
 
+## Implementation status
+
+The Phase 6 branching vertical slice is implemented in `ReactiveGeometry/`:
+
+- deterministic tree planning with stable branch identity, topology and
+  root/junction/tip metadata;
+- packed branch-path GPU resources with Phase 5-compatible rest/live frames and
+  branch-local tube bindings;
+- depth-ordered hierarchy attachment that keeps child starts on live parent
+  junctions;
+- radius/depth/local-tip flexibility with bounded direct path deformation;
+- GPU wind-like `BranchTurbulenceDeformer` and
+  transform/local-target `BranchAttractorDeformer`;
+- independently skinned branch tubes with line/glyph and one-shot live graph
+  overlays;
+- a functional `Phase6/01_BranchGraphs` scene and UI Toolkit component
+  inspectors;
+- EditMode topology, attachment, deformation and lifecycle tests plus a
+  PlayMode rendering smoke test.
+
+The first implementation deliberately keeps branch tubes overlapping at
+junctions rather than producing one watertight surface. Dynamic path forces,
+particle networks, arbitrary cyclic graphs and Voronoi remain outside the
+branching phase gate.
+
 ## 1. Purpose
 
 Phase 6 turns Phase 5's single-path subsystem into a reusable collection of

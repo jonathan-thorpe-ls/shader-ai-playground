@@ -1,0 +1,145 @@
+#pragma kernel CopyBranchVertices
+#pragma kernel CopyBranchPhysicalAttributes
+#pragma kernel CopyBranchStructureAttributes
+#pragma kernel CopyBranchTopology
+#pragma kernel CopyBranchHeader
+
+struct GeometryHeader
+{
+    uint vertexCount;
+    uint primitiveCount;
+    uint edgeCount;
+    uint regionCount;
+    float3 boundsMin;
+    uint flags;
+    float3 boundsMax;
+    uint maxDegree;
+};
+
+StructuredBuffer<float3> _SourcePositions;
+StructuredBuffer<float3> _SourceNormals;
+StructuredBuffer<float4> _SourceTangents;
+StructuredBuffer<float2> _SourceCoordinates;
+StructuredBuffer<uint3> _SourceTriangles;
+StructuredBuffer<uint> _SourceRegions;
+StructuredBuffer<uint> _SourceBranchIds;
+StructuredBuffer<float> _SourceRootDistances;
+StructuredBuffer<float> _SourceTipDistances;
+StructuredBuffer<float> _SourceLocalDistances;
+StructuredBuffer<float> _SourceLocalPositions;
+StructuredBuffer<uint> _SourceDepths;
+StructuredBuffer<float> _SourceRadii;
+StructuredBuffer<float> _SourceTipWeights;
+StructuredBuffer<float> _SourceFlexibilities;
+StructuredBuffer<float> _SourceStiffnesses;
+
+RWByteAddressBuffer _DynamicVertices;
+RWByteAddressBuffer _StaticVertices;
+RWByteAddressBuffer _Indices;
+RWByteAddressBuffer _DrawArgs;
+RWStructuredBuffer<float3> _RestPositions;
+RWStructuredBuffer<float3> _RestNormals;
+RWStructuredBuffer<float4> _RestTangents;
+RWStructuredBuffer<float2> _LocalCoordinates;
+RWStructuredBuffer<float> _Masses;
+RWStructuredBuffer<float> _DeformationWeights;
+RWStructuredBuffer<uint> _BranchIds;
+RWStructuredBuffer<float> _RootDistances;
+RWStructuredBuffer<float> _TipDistances;
+RWStructuredBuffer<float> _LocalDistances;
+RWStructuredBuffer<float> _LocalPositions;
+RWStructuredBuffer<uint> _Depths;
+RWStructuredBuffer<float> _Radii;
+RWStructuredBuffer<float> _TipWeights;
+RWStructuredBuffer<float> _Flexibilities;
+RWStructuredBuffer<float> _Stiffnesses;
+RWStructuredBuffer<uint> _RegionIds;
+RWStructuredBuffer<GeometryHeader> _Header;
+
+uint _VertexCount;
+uint _PrimitiveCount;
+uint _EdgeCount;
+uint _RegionCount;
+float3 _BoundsMin;
+float3 _BoundsMax;
+
+static const uint DYNAMIC_VERTEX_STRIDE = 24;
+static const uint STATIC_VERTEX_STRIDE = 24;
+
+[numthreads(64, 1, 1)]
+void CopyBranchVertices(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _VertexCount)
+        return;
+    _RestPositions[id] = _SourcePositions[id];
+    _RestNormals[id] = _SourceNormals[id];
+    _RestTangents[id] = _SourceTangents[id];
+    _LocalCoordinates[id] = _SourceCoordinates[id];
+    uint dynamicOffset = id * DYNAMIC_VERTEX_STRIDE;
+    _DynamicVertices.Store3(dynamicOffset, asuint(_SourcePositions[id]));
+    _DynamicVertices.Store3(dynamicOffset + 12, asuint(_SourceNormals[id]));
+    uint staticOffset = id * STATIC_VERTEX_STRIDE;
+    _StaticVertices.Store4(staticOffset, asuint(_SourceTangents[id]));
+    _StaticVertices.Store2(staticOffset + 16, asuint(_SourceCoordinates[id]));
+}
+
+[numthreads(64, 1, 1)]
+void CopyBranchPhysicalAttributes(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _VertexCount)
+        return;
+    _Masses[id] = max(0.001, _SourceRadii[id]);
+    _DeformationWeights[id] = _SourceFlexibilities[id];
+    _BranchIds[id] = _SourceBranchIds[id];
+    _RootDistances[id] = _SourceRootDistances[id];
+    _TipDistances[id] = _SourceTipDistances[id];
+    _LocalDistances[id] = _SourceLocalDistances[id];
+}
+
+[numthreads(64, 1, 1)]
+void CopyBranchStructureAttributes(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _VertexCount)
+        return;
+    _LocalPositions[id] = _SourceLocalPositions[id];
+    _Depths[id] = _SourceDepths[id];
+    _Radii[id] = _SourceRadii[id];
+    _TipWeights[id] = _SourceTipWeights[id];
+    _Flexibilities[id] = _SourceFlexibilities[id];
+    _Stiffnesses[id] = _SourceStiffnesses[id];
+}
+
+[numthreads(64, 1, 1)]
+void CopyBranchTopology(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _PrimitiveCount)
+        return;
+    _Indices.Store3(id * 12, _SourceTriangles[id]);
+    _RegionIds[id] = _SourceRegions[id];
+}
+
+[numthreads(1, 1, 1)]
+void CopyBranchHeader(uint3 dispatchId : SV_DispatchThreadID)
+{
+    if (dispatchId.x != 0)
+        return;
+    GeometryHeader header;
+    header.vertexCount = _VertexCount;
+    header.primitiveCount = _PrimitiveCount;
+    header.edgeCount = _EdgeCount;
+    header.regionCount = _RegionCount;
+    header.boundsMin = _BoundsMin;
+    header.flags = 4;
+    header.boundsMax = _BoundsMax;
+    header.maxDegree = 8;
+    _Header[0] = header;
+    _DrawArgs.Store(0, _PrimitiveCount * 3);
+    _DrawArgs.Store(4, 1);
+    _DrawArgs.Store(8, 0);
+    _DrawArgs.Store(12, 0);
+    _DrawArgs.Store(16, 0);
+}
