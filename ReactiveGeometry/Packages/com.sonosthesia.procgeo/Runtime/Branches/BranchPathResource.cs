@@ -166,7 +166,8 @@ namespace Sonosthesia.ProcGeo
     {
         private GraphicsBuffer _pathContributions;
         private GraphicsBuffer _pathIndices;
-        private GraphicsBuffer _crossSections;
+        private GraphicsBuffer _skinWeights;
+        private GraphicsBuffer _skinOffsets;
         private GraphicsBuffer _basePositions;
         private GraphicsBuffer _baseNormals;
         private GraphicsBuffer _baseTangents;
@@ -181,9 +182,11 @@ namespace Sonosthesia.ProcGeo
             _pathContributions = Create<Vector3>(
                 pathData.Plan.SampleCount, "BranchPath.Contributions", owner);
             _pathIndices = SetData(
-                pathData.VertexPathIndices, "BranchPath.VertexIndices", owner);
-            _crossSections = SetData(
-                pathData.CrossSectionPositions, "BranchPath.CrossSections", owner);
+                pathData.VertexPathIndices, "BranchPath.SkinIndices", owner);
+            _skinWeights = SetData(
+                pathData.SkinWeights, "BranchPath.SkinWeights", owner);
+            _skinOffsets = SetData(
+                pathData.SkinOffsets, "BranchPath.SkinOffsets", owner);
             _basePositions = Create<Vector3>(
                 layout.VertexCount, "BranchPath.BasePositions", owner);
             _baseNormals = Create<Vector3>(
@@ -196,7 +199,8 @@ namespace Sonosthesia.ProcGeo
 
         public GraphicsBuffer PathContributions => _pathContributions;
         public GraphicsBuffer VertexPathIndices => _pathIndices;
-        public GraphicsBuffer CrossSections => _crossSections;
+        public GraphicsBuffer SkinWeights => _skinWeights;
+        public GraphicsBuffer SkinOffsets => _skinOffsets;
         public GraphicsBuffer BasePositions => _basePositions;
         public GraphicsBuffer BaseNormals => _baseNormals;
         public GraphicsBuffer BaseTangents => _baseTangents;
@@ -208,7 +212,8 @@ namespace Sonosthesia.ProcGeo
             _disposed = true;
             BranchPathResource.Release(_pathContributions);
             BranchPathResource.Release(_pathIndices);
-            BranchPathResource.Release(_crossSections);
+            BranchPathResource.Release(_skinWeights);
+            BranchPathResource.Release(_skinOffsets);
             BranchPathResource.Release(_basePositions);
             BranchPathResource.Release(_baseNormals);
             BranchPathResource.Release(_baseTangents);

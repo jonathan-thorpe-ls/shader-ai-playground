@@ -9,22 +9,28 @@ namespace Sonosthesia.ProcGeo
     {
         public BranchPathGeometryData(
             BranchGraphPlan plan,
-            uint[] vertexPathIndices,
-            Vector2[] crossSectionPositions)
+            uint[] skinIndices,
+            float[] skinWeights,
+            Vector3[] skinOffsets)
         {
             Plan = plan ?? throw new ArgumentNullException(nameof(plan));
-            VertexPathIndices = vertexPathIndices ??
-                throw new ArgumentNullException(nameof(vertexPathIndices));
-            CrossSectionPositions = crossSectionPositions ??
-                throw new ArgumentNullException(nameof(crossSectionPositions));
-            if (vertexPathIndices.Length != crossSectionPositions.Length)
+            VertexPathIndices = skinIndices ??
+                throw new ArgumentNullException(nameof(skinIndices));
+            SkinWeights = skinWeights ??
+                throw new ArgumentNullException(nameof(skinWeights));
+            SkinOffsets = skinOffsets ??
+                throw new ArgumentNullException(nameof(skinOffsets));
+            if (skinIndices.Length != skinWeights.Length ||
+                skinIndices.Length != skinOffsets.Length ||
+                skinIndices.Length % 4 != 0)
                 throw new ArgumentException(
                     "Path binding arrays must have matching counts.");
         }
 
         public BranchGraphPlan Plan { get; }
         public uint[] VertexPathIndices { get; }
-        public Vector2[] CrossSectionPositions { get; }
+        public float[] SkinWeights { get; }
+        public Vector3[] SkinOffsets { get; }
     }
 
     public sealed class BranchGeometryGenerator : IGeometryGenerator
@@ -57,11 +63,12 @@ namespace Sonosthesia.ProcGeo
 
         public BranchGeometryGenerator(
             BranchGraphPlan plan,
-            int radialSegments,
+            float meshCellSize = 0.08f,
+            float meshSmoothingRadius = 0.12f,
             ComputeShader shader = null)
         {
             _plan = plan ?? throw new ArgumentNullException(nameof(plan));
-            _data = Build(plan, radialSegments);
+            _data = Build(plan, meshCellSize, meshSmoothingRadius);
             _shader = shader != null
                 ? shader
                 : Resources.Load<ComputeShader>("ProcGeo/BranchGeometry")
@@ -135,7 +142,7 @@ namespace Sonosthesia.ProcGeo
                 _data.Triangles.Length,
                 _data.EdgeCount,
                 _plan.BranchCount,
-                12,
+                32,
                 attributes);
         }
 
@@ -224,7 +231,10 @@ namespace Sonosthesia.ProcGeo
         }
 
         public BranchPathGeometryData CreatePathGeometryData() =>
-            new(_plan, _data.VertexPathIndices, _data.CrossSectionPositions);
+            new(_plan,
+                _data.SkinIndices,
+                _data.SkinWeights,
+                _data.SkinOffsets);
 
         public void Dispose()
         {
@@ -265,106 +275,627 @@ namespace Sonosthesia.ProcGeo
 
         private static BranchMeshData Build(
             BranchGraphPlan plan,
-            int radialSegments)
+            float meshCellSize,
+            float meshSmoothingRadius)
         {
-            radialSegments = Mathf.Clamp(radialSegments, 3, 32);
-            int vertexCount = plan.SampleCount * radialSegments;
-            Vector3[] positions = new Vector3[vertexCount];
-            Vector3[] normals = new Vector3[vertexCount];
-            Vector4[] tangents = new Vector4[vertexCount];
-            Vector2[] coordinates = new Vector2[vertexCount];
-            uint[] branchIds = new uint[vertexCount];
-            float[] rootDistances = new float[vertexCount];
-            float[] tipDistances = new float[vertexCount];
-            float[] localDistances = new float[vertexCount];
-            float[] localPositions = new float[vertexCount];
-            uint[] depths = new uint[vertexCount];
-            float[] radii = new float[vertexCount];
-            float[] tipWeights = new float[vertexCount];
-            float[] flexibilities = new float[vertexCount];
-            float[] stiffnesses = new float[vertexCount];
-            uint[] vertexPathIndices = new uint[vertexCount];
-            Vector2[] crossSections = new Vector2[vertexCount];
+            meshCellSize = Mathf.Max(meshCellSize, 0.01f);
+            meshSmoothingRadius = Mathf.Max(meshSmoothingRadius, 0f);
+            List<Vector3> positions = new();
+            List<Vector3> normals = new();
+            List<Vector4> tangents = new();
+            List<Vector2> coordinates = new();
+            List<uint> branchIds = new();
+            List<float> rootDistances = new();
+            List<float> tipDistances = new();
+            List<float> localDistances = new();
+            List<float> localPositions = new();
+            List<uint> depths = new();
+            List<float> radii = new();
+            List<float> tipWeights = new();
+            List<float> flexibilities = new();
+            List<float> stiffnesses = new();
             List<Vector3Int> triangles = new();
             List<uint> regions = new();
-            int edgeCount = 0;
-            for (int branchIndex = 0; branchIndex < plan.BranchCount; branchIndex++)
+            float padding = Mathf.Max(meshCellSize * 3f, 0.5f);
+            Bounds gridBounds = plan.Bounds;
+            gridBounds.Expand(padding * 2f);
+            int nx = Mathf.CeilToInt(gridBounds.size.x / meshCellSize) + 1;
+            int ny = Mathf.CeilToInt(gridBounds.size.y / meshCellSize) + 1;
+            int nz = Mathf.CeilToInt(gridBounds.size.z / meshCellSize) + 1;
+            long voxelCount = (long)nx * ny * nz;
+            if (voxelCount > 4_000_000)
             {
-                BranchRecord branch = plan.Branches[branchIndex];
-                for (int sample = 0; sample < branch.SampleCount; sample++)
+                throw new ArgumentOutOfRangeException(
+                    nameof(meshCellSize),
+                    $"The branch mesh grid would contain {voxelCount} samples.");
+            }
+            float[] field = new float[voxelCount];
+            for (int z = 0; z < nz; z++)
+            for (int y = 0; y < ny; y++)
+            for (int x = 0; x < nx; x++)
+            {
+                Vector3 point = gridBounds.min +
+                    new Vector3(x, y, z) * meshCellSize;
+                field[GridIndex(x, y, z, nx, ny)] =
+                    EvaluateDistance(plan, point, meshSmoothingRadius) +
+                    DeterministicGridBias(x, y, z, meshCellSize);
+            }
+
+            Dictionary<ulong, int> vertices = new();
+            Dictionary<Vector3Int, int> coincidentVertices = new();
+            int[][] tetrahedra =
+            {
+                new[] { 0, 5, 1, 6 },
+                new[] { 0, 1, 2, 6 },
+                new[] { 0, 2, 3, 6 },
+                new[] { 0, 3, 7, 6 },
+                new[] { 0, 7, 4, 6 },
+                new[] { 0, 4, 5, 6 }
+            };
+            for (int z = 0; z < nz - 1; z++)
+            for (int y = 0; y < ny - 1; y++)
+            for (int x = 0; x < nx - 1; x++)
+            {
+                int[] cube =
                 {
-                    int pathSample = (int)branch.SampleOffset + sample;
-                    BranchSample metadata = plan.Samples[pathSample];
-                    for (int side = 0; side < radialSegments; side++)
+                    GridIndex(x, y, z, nx, ny),
+                    GridIndex(x + 1, y, z, nx, ny),
+                    GridIndex(x + 1, y + 1, z, nx, ny),
+                    GridIndex(x, y + 1, z, nx, ny),
+                    GridIndex(x, y, z + 1, nx, ny),
+                    GridIndex(x + 1, y, z + 1, nx, ny),
+                    GridIndex(x + 1, y + 1, z + 1, nx, ny),
+                    GridIndex(x, y + 1, z + 1, nx, ny)
+                };
+                foreach (int[] tetrahedron in tetrahedra)
+                {
+                    List<int> crossings = new();
+                    List<Vector3> crossingPositions = new();
+                    List<Vector3> crossingNormals = new();
+                    HashSet<int> crossingVertices = new();
+                    int[,] tetraEdges =
                     {
-                        int vertex = pathSample * radialSegments + side;
-                        float angle = side / (float)radialSegments * Mathf.PI * 2f;
-                        Vector2 section = new(
-                            Mathf.Cos(angle) * metadata.Radius,
-                            Mathf.Sin(angle) * metadata.Radius);
-                        Vector3 radial = metadata.Normal * section.x +
-                            metadata.Binormal * section.y;
-                        positions[vertex] = metadata.Position + radial;
-                        normals[vertex] = radial.normalized;
-                        tangents[vertex] = new Vector4(
-                            metadata.Tangent.x,
-                            metadata.Tangent.y,
-                            metadata.Tangent.z,
-                            1f);
-                        coordinates[vertex] = new Vector2(
-                            metadata.LocalPosition,
-                            side / (float)radialSegments);
-                        branchIds[vertex] = branch.Id;
-                        rootDistances[vertex] = metadata.DistanceFromRoot;
-                        tipDistances[vertex] = metadata.DistanceToTip;
-                        localDistances[vertex] = metadata.LocalDistance;
-                        localPositions[vertex] = metadata.LocalPosition;
-                        depths[vertex] = metadata.GenerationDepth;
-                        radii[vertex] = metadata.Radius;
-                        tipWeights[vertex] = metadata.TipWeight;
-                        flexibilities[vertex] = metadata.Flexibility;
-                        stiffnesses[vertex] = metadata.Stiffness;
-                        vertexPathIndices[vertex] = (uint)pathSample;
-                        crossSections[vertex] = section;
+                        { 0, 1 }, { 0, 2 }, { 0, 3 },
+                        { 1, 2 }, { 1, 3 }, { 2, 3 }
+                    };
+                    for (int edge = 0; edge < 6; edge++)
+                    {
+                        int cornerA = cube[tetrahedron[tetraEdges[edge, 0]]];
+                        int cornerB = cube[tetrahedron[tetraEdges[edge, 1]]];
+                        bool insideA = field[cornerA] <= 0f;
+                        bool insideB = field[cornerB] <= 0f;
+                        if (insideA == insideB)
+                            continue;
+                        int low = Mathf.Min(cornerA, cornerB);
+                        int high = Mathf.Max(cornerA, cornerB);
+                        ulong key = ((ulong)(uint)low << 32) | (uint)high;
+                        Vector3 point;
+                        int vertex;
+                        if (!vertices.TryGetValue(key, out vertex))
+                        {
+                            Vector3 pointA = GridPoint(
+                                cornerA, gridBounds.min, meshCellSize, nx, ny);
+                            Vector3 pointB = GridPoint(
+                                cornerB, gridBounds.min, meshCellSize, nx, ny);
+                            float t = Mathf.Abs(field[cornerA]) /
+                                Mathf.Max(
+                                    Mathf.Abs(field[cornerA]) +
+                                    Mathf.Abs(field[cornerB]),
+                                    1e-6f);
+                            point = Vector3.Lerp(pointA, pointB, t);
+                            Vector3Int positionKey = QuantizePosition(point);
+                            if (!coincidentVertices.TryGetValue(
+                                    positionKey, out vertex))
+                            {
+                                BranchSample sample = NearestSample(plan, point);
+                                Vector3 normal = DistanceGradient(
+                                    plan, point, meshSmoothingRadius);
+                                if (normal.sqrMagnitude < 1e-8f)
+                                    normal = sample.Normal;
+                                vertex = positions.Count;
+                                positions.Add(point);
+                                normals.Add(normal.normalized);
+                                tangents.Add(new Vector4(
+                                    sample.Tangent.x,
+                                    sample.Tangent.y,
+                                    sample.Tangent.z,
+                                    1f));
+                                coordinates.Add(new Vector2(
+                                    sample.LocalPosition,
+                                    (sample.BranchId + 1f) /
+                                        Mathf.Max(1f, plan.BranchCount)));
+                                branchIds.Add(sample.BranchId);
+                                rootDistances.Add(sample.DistanceFromRoot);
+                                tipDistances.Add(sample.DistanceToTip);
+                                localDistances.Add(sample.LocalDistance);
+                                localPositions.Add(sample.LocalPosition);
+                                depths.Add(sample.GenerationDepth);
+                                radii.Add(sample.Radius);
+                                tipWeights.Add(sample.TipWeight);
+                                flexibilities.Add(sample.Flexibility);
+                                stiffnesses.Add(sample.Stiffness);
+                                coincidentVertices.Add(positionKey, vertex);
+                            }
+                            vertices.Add(key, vertex);
+                        }
+                        else
+                        {
+                            point = positions[vertex];
+                        }
+                        if (crossingVertices.Add(vertex))
+                        {
+                            crossings.Add(vertex);
+                            crossingPositions.Add(point);
+                            crossingNormals.Add(normals[vertex]);
+                        }
                     }
-                    if (sample == branch.SampleCount - 1)
+                    if (crossings.Count < 3)
                         continue;
-                    for (int side = 0; side < radialSegments; side++)
+                    Vector3 normalHint = Vector3.zero;
+                    foreach (Vector3 crossingNormal in crossingNormals)
+                        normalHint += crossingNormal;
+                    normalHint.Normalize();
+                    Vector3 centre = Vector3.zero;
+                    foreach (Vector3 point in crossingPositions)
+                        centre += point;
+                    centre /= crossingPositions.Count;
+                    Vector3 basisU = Vector3.Cross(
+                        normalHint,
+                        Mathf.Abs(normalHint.y) > 0.8f
+                            ? Vector3.right
+                            : Vector3.up).normalized;
+                    Vector3 basisV = Vector3.Cross(normalHint, basisU);
+                    List<int> order = new(crossings.Count);
+                    for (int i = 0; i < crossings.Count; i++)
+                        order.Add(i);
+                    order.Sort((a, b) =>
                     {
-                        int nextSide = (side + 1) % radialSegments;
-                        int a = pathSample * radialSegments + side;
-                        int c = pathSample * radialSegments + nextSide;
-                        int b = (pathSample + 1) * radialSegments + side;
-                        int d = (pathSample + 1) * radialSegments + nextSide;
-                        triangles.Add(new Vector3Int(a, c, b));
-                        triangles.Add(new Vector3Int(c, d, b));
-                        regions.Add(branch.Id);
-                        regions.Add(branch.Id);
+                        Vector3 offsetA = crossingPositions[a] - centre;
+                        Vector3 offsetB = crossingPositions[b] - centre;
+                        float angleA = Mathf.Atan2(
+                            Vector3.Dot(offsetA, basisV),
+                            Vector3.Dot(offsetA, basisU));
+                        float angleB = Mathf.Atan2(
+                            Vector3.Dot(offsetB, basisV),
+                            Vector3.Dot(offsetB, basisU));
+                        return angleA.CompareTo(angleB);
+                    });
+                    for (int i = 1; i < order.Count - 1; i++)
+                    {
+                        int a = crossings[order[0]];
+                        int b = crossings[order[i]];
+                        int c = crossings[order[i + 1]];
+                        Vector3 faceNormal = Vector3.Cross(
+                            positions[b] - positions[a],
+                            positions[c] - positions[a]);
+                        if (Vector3.Dot(faceNormal, normalHint) < 0f)
+                            (b, c) = (c, b);
+                        triangles.Add(new Vector3Int(a, b, c));
+                        regions.Add(branchIds[a]);
                     }
                 }
-                edgeCount += radialSegments *
-                    (3 * (int)branch.SampleCount - 2);
             }
-            return new BranchMeshData(
+
+            if (positions.Count == 0 || triangles.Count == 0)
+                throw new InvalidOperationException(
+                    "Branch mesh extraction produced no surface.");
+            ResolveDegenerateTriangles(
                 positions,
                 normals,
                 tangents,
-                coordinates,
+                triangles,
+                meshCellSize);
+            OrientTrianglesConsistently(positions, triangles);
+            List<uint> skinIndices = new(positions.Count * 4);
+            List<float> skinWeights = new(positions.Count * 4);
+            List<Vector3> skinOffsets = new(positions.Count * 4);
+            BuildSkinBindings(
+                plan,
+                positions,
+                skinIndices,
+                skinWeights,
+                skinOffsets);
+            HashSet<long> edges = new();
+            foreach (Vector3Int triangle in triangles)
+            {
+                AddEdge(edges, triangle.x, triangle.y);
+                AddEdge(edges, triangle.y, triangle.z);
+                AddEdge(edges, triangle.z, triangle.x);
+            }
+            return new BranchMeshData(
+                positions.ToArray(),
+                normals.ToArray(),
+                tangents.ToArray(),
+                coordinates.ToArray(),
                 triangles.ToArray(),
                 regions.ToArray(),
-                branchIds,
-                rootDistances,
-                tipDistances,
-                localDistances,
-                localPositions,
-                depths,
-                radii,
-                tipWeights,
-                flexibilities,
-                stiffnesses,
-                vertexPathIndices,
-                crossSections,
-                edgeCount);
+                branchIds.ToArray(),
+                rootDistances.ToArray(),
+                tipDistances.ToArray(),
+                localDistances.ToArray(),
+                localPositions.ToArray(),
+                depths.ToArray(),
+                radii.ToArray(),
+                tipWeights.ToArray(),
+                flexibilities.ToArray(),
+                stiffnesses.ToArray(),
+                skinIndices.ToArray(),
+                skinWeights.ToArray(),
+                skinOffsets.ToArray(),
+                edges.Count);
+        }
+
+        private static int GridIndex(
+            int x,
+            int y,
+            int z,
+            int nx,
+            int ny) => x + nx * (y + ny * z);
+
+        private static float DeterministicGridBias(
+            int x,
+            int y,
+            int z,
+            float cellSize)
+        {
+            uint hash = (uint)x * 73856093u ^
+                (uint)y * 19349663u ^
+                (uint)z * 83492791u;
+            hash ^= hash >> 13;
+            hash *= 1274126177u;
+            float unit = (hash & 0xFFFF) / 65535f - 0.5f;
+            return unit * cellSize * 0.0002f;
+        }
+
+        private static void ResolveDegenerateTriangles(
+            List<Vector3> positions,
+            List<Vector3> normals,
+            List<Vector4> tangents,
+            List<Vector3Int> triangles,
+            float cellSize)
+        {
+            const float minimumArea = 1e-7f;
+            for (int pass = 0; pass < 4; pass++)
+            {
+                HashSet<int> affected = new();
+                foreach (Vector3Int triangle in triangles)
+                {
+                    float area = Vector3.Cross(
+                        positions[triangle.y] - positions[triangle.x],
+                        positions[triangle.z] - positions[triangle.x]).magnitude;
+                    if (area > minimumArea)
+                        continue;
+                    affected.Add(triangle.x);
+                    affected.Add(triangle.y);
+                    affected.Add(triangle.z);
+                }
+                if (affected.Count == 0)
+                    return;
+                foreach (int vertex in affected)
+                {
+                    Vector3 normal = normals[vertex];
+                    Vector3 tangent = tangents[vertex];
+                    Vector3 binormal = Vector3.Cross(normal, tangent);
+                    if (binormal.sqrMagnitude < 1e-8f)
+                        binormal = Vector3.up;
+                    binormal.Normalize();
+                    float angle = vertex * 12.9898f + pass * 78.233f;
+                    Vector2 offset = new(
+                        Mathf.Sin(angle),
+                        Mathf.Cos(angle * 1.618f));
+                    positions[vertex] +=
+                        (normal * offset.x + binormal * offset.y) *
+                        cellSize * 0.0125f;
+                }
+            }
+            foreach (Vector3Int triangle in triangles)
+            {
+                float area = Vector3.Cross(
+                    positions[triangle.y] - positions[triangle.x],
+                    positions[triangle.z] - positions[triangle.x]).magnitude;
+                if (area <= minimumArea)
+                {
+                    throw new InvalidOperationException(
+                        $"Could not resolve degenerate branch triangle {triangle}.");
+                }
+            }
+        }
+
+        private static void OrientTrianglesConsistently(
+            List<Vector3> positions,
+            List<Vector3Int> triangles)
+        {
+            Dictionary<long, List<EdgeFace>> edgeFaces = new();
+            for (int face = 0; face < triangles.Count; face++)
+            {
+                Vector3Int triangle = triangles[face];
+                Add(triangle.x, triangle.y);
+                Add(triangle.y, triangle.z);
+                Add(triangle.z, triangle.x);
+
+                void Add(int a, int b)
+                {
+                    long key = ((long)Mathf.Min(a, b) << 32) |
+                        (uint)Mathf.Max(a, b);
+                    if (!edgeFaces.TryGetValue(key, out List<EdgeFace> faces))
+                    {
+                        faces = new List<EdgeFace>(2);
+                        edgeFaces.Add(key, faces);
+                    }
+                    faces.Add(new EdgeFace(face, a, b));
+                }
+            }
+
+            bool[] visited = new bool[triangles.Count];
+            bool[] flipped = new bool[triangles.Count];
+            Queue<int> pending = new();
+            for (int componentStart = 0;
+                componentStart < triangles.Count;
+                componentStart++)
+            {
+                if (visited[componentStart])
+                    continue;
+                visited[componentStart] = true;
+                pending.Enqueue(componentStart);
+                while (pending.Count > 0)
+                {
+                    int face = pending.Dequeue();
+                    Vector3Int triangle = triangles[face];
+                    Process(triangle.x, triangle.y);
+                    Process(triangle.y, triangle.z);
+                    Process(triangle.z, triangle.x);
+
+                    void Process(int a, int b)
+                    {
+                        long key = ((long)Mathf.Min(a, b) << 32) |
+                            (uint)Mathf.Max(a, b);
+                        if (!edgeFaces.TryGetValue(
+                                key, out List<EdgeFace> faces) ||
+                            faces.Count != 2)
+                        {
+                            return;
+                        }
+                        EdgeFace neighbour = faces[0].Face == face
+                            ? faces[1]
+                            : faces[0];
+                        bool sameDirection =
+                            (a == neighbour.A && b == neighbour.B);
+                        bool flipNeighbour =
+                            flipped[face] ^ sameDirection;
+                        if (!visited[neighbour.Face])
+                        {
+                            flipped[neighbour.Face] = flipNeighbour;
+                            visited[neighbour.Face] = true;
+                            pending.Enqueue(neighbour.Face);
+                        }
+                    }
+                }
+            }
+
+            for (int i = 0; i < triangles.Count; i++)
+            {
+                if (!flipped[i])
+                    continue;
+                Vector3Int triangle = triangles[i];
+                triangles[i] = new Vector3Int(
+                    triangle.x, triangle.z, triangle.y);
+            }
+
+            double signedVolume = 0d;
+            foreach (Vector3Int triangle in triangles)
+            {
+                signedVolume += Vector3.Dot(
+                    positions[triangle.x],
+                    Vector3.Cross(
+                        positions[triangle.y],
+                        positions[triangle.z]));
+            }
+            if (signedVolume >= 0d)
+                return;
+            for (int i = 0; i < triangles.Count; i++)
+            {
+                Vector3Int triangle = triangles[i];
+                triangles[i] = new Vector3Int(
+                    triangle.x, triangle.z, triangle.y);
+            }
+        }
+
+        private readonly struct EdgeFace
+        {
+            public EdgeFace(int face, int a, int b)
+            {
+                Face = face;
+                A = a;
+                B = b;
+            }
+
+            public int Face { get; }
+            public int A { get; }
+            public int B { get; }
+        }
+
+        private static Vector3Int QuantizePosition(Vector3 position)
+        {
+            const float scale = 100000f;
+            return new Vector3Int(
+                Mathf.RoundToInt(position.x * scale),
+                Mathf.RoundToInt(position.y * scale),
+                Mathf.RoundToInt(position.z * scale));
+        }
+
+        private static Vector3 GridPoint(
+            int index,
+            Vector3 origin,
+            float cell,
+            int nx,
+            int ny)
+        {
+            int x = index % nx;
+            int y = index / nx % ny;
+            int z = index / (nx * ny);
+            return origin + new Vector3(x, y, z) * cell;
+        }
+
+        private static float EvaluateDistance(
+            BranchGraphPlan plan,
+            Vector3 point,
+            float smoothingRadius)
+        {
+            float distance = float.MaxValue;
+            foreach (BranchRecord branch in plan.Branches)
+            {
+                int start = (int)branch.SampleOffset;
+                int count = (int)branch.SampleCount;
+                for (int i = 0; i < count - 1; i++)
+                {
+                    BranchSample a = plan.Samples[start + i];
+                    BranchSample b = plan.Samples[start + i + 1];
+                    Vector3 segment = b.Position - a.Position;
+                    float lengthSquared = segment.sqrMagnitude;
+                    float t = lengthSquared > 1e-8f
+                        ? Mathf.Clamp01(
+                            Vector3.Dot(point - a.Position, segment) /
+                            lengthSquared)
+                        : 0f;
+                    Vector3 nearest = Vector3.Lerp(a.Position, b.Position, t);
+                    float radius = Mathf.Lerp(a.Radius, b.Radius, t);
+                    float capsule = Vector3.Distance(point, nearest) - radius;
+                    distance = distance == float.MaxValue
+                        ? capsule
+                        : SmoothMinimum(
+                            distance, capsule, smoothingRadius);
+                }
+            }
+            return distance;
+        }
+
+        private static Vector3 DistanceGradient(
+            BranchGraphPlan plan,
+            Vector3 point,
+            float smoothingRadius)
+        {
+            const float epsilon = 0.001f;
+            return new Vector3(
+                EvaluateDistance(
+                    plan, point + Vector3.right * epsilon, smoothingRadius) -
+                    EvaluateDistance(
+                        plan, point - Vector3.right * epsilon, smoothingRadius),
+                EvaluateDistance(
+                    plan, point + Vector3.up * epsilon, smoothingRadius) -
+                    EvaluateDistance(
+                        plan, point - Vector3.up * epsilon, smoothingRadius),
+                EvaluateDistance(
+                    plan, point + Vector3.forward * epsilon, smoothingRadius) -
+                    EvaluateDistance(
+                        plan, point - Vector3.forward * epsilon, smoothingRadius));
+        }
+
+        private static float SmoothMinimum(
+            float a,
+            float b,
+            float radius)
+        {
+            if (radius <= 0f)
+                return Mathf.Min(a, b);
+            float blend = Mathf.Clamp01(
+                0.5f + 0.5f * (b - a) / radius);
+            return Mathf.Lerp(b, a, blend) -
+                radius * blend * (1f - blend);
+        }
+
+        private static BranchSample NearestSample(
+            BranchGraphPlan plan,
+            Vector3 point)
+        {
+            BranchSample result = plan.Samples[0];
+            float best = float.MaxValue;
+            foreach (BranchSample sample in plan.Samples)
+            {
+                float distance = (
+                    sample.Position - point).sqrMagnitude;
+                if (distance < best)
+                {
+                    best = distance;
+                    result = sample;
+                }
+            }
+            return result;
+        }
+
+        private static void BuildSkinBindings(
+            BranchGraphPlan plan,
+            List<Vector3> positions,
+            List<uint> indices,
+            List<float> weights,
+            List<Vector3> offsets)
+        {
+            for (int vertex = 0; vertex < positions.Count; vertex++)
+            {
+                int[] nearest = { -1, -1, -1, -1 };
+                float[] distance = {
+                    float.MaxValue,
+                    float.MaxValue,
+                    float.MaxValue,
+                    float.MaxValue
+                };
+                for (int sample = 0; sample < plan.SampleCount; sample++)
+                {
+                    float squared =
+                        (positions[vertex] -
+                         plan.Samples[sample].Position).sqrMagnitude;
+                    for (int slot = 0; slot < 4; slot++)
+                    {
+                        if (squared >= distance[slot])
+                            continue;
+                        for (int shift = 3; shift > slot; shift--)
+                        {
+                            distance[shift] = distance[shift - 1];
+                            nearest[shift] = nearest[shift - 1];
+                        }
+                        distance[slot] = squared;
+                        nearest[slot] = sample;
+                        break;
+                    }
+                }
+                float totalWeight = 0f;
+                for (int slot = 0; slot < 4; slot++)
+                {
+                    if (nearest[slot] < 0)
+                    {
+                        nearest[slot] = nearest[0];
+                        distance[slot] = float.MaxValue;
+                    }
+                    float weight = 1f /
+                        Mathf.Max(distance[slot], 0.0001f);
+                    weights.Add(weight);
+                    totalWeight += weight;
+                    indices.Add((uint)nearest[slot]);
+                    BranchSample sample = plan.Samples[nearest[slot]];
+                    offsets.Add(new Vector3(
+                        Vector3.Dot(
+                            positions[vertex] - sample.Position,
+                            sample.Tangent),
+                        Vector3.Dot(
+                            positions[vertex] - sample.Position,
+                            sample.Normal),
+                        Vector3.Dot(
+                            positions[vertex] - sample.Position,
+                            sample.Binormal)));
+                }
+                int first = weights.Count - 4;
+                for (int slot = 0; slot < 4; slot++)
+                    weights[first + slot] /= totalWeight;
+            }
+        }
+
+        private static void AddEdge(
+            HashSet<long> edges,
+            int a,
+            int b)
+        {
+            long low = Mathf.Min(a, b);
+            long high = Mathf.Max(a, b);
+            edges.Add((low << 32) | high);
         }
 
         private sealed class BranchMeshData
@@ -386,8 +917,9 @@ namespace Sonosthesia.ProcGeo
                 float[] tipWeights,
                 float[] flexibilities,
                 float[] stiffnesses,
-                uint[] vertexPathIndices,
-                Vector2[] crossSectionPositions,
+                uint[] skinIndices,
+                float[] skinWeights,
+                Vector3[] skinOffsets,
                 int edgeCount)
             {
                 Positions = positions;
@@ -406,8 +938,9 @@ namespace Sonosthesia.ProcGeo
                 TipWeights = tipWeights;
                 Flexibilities = flexibilities;
                 Stiffnesses = stiffnesses;
-                VertexPathIndices = vertexPathIndices;
-                CrossSectionPositions = crossSectionPositions;
+                SkinIndices = skinIndices;
+                SkinWeights = skinWeights;
+                SkinOffsets = skinOffsets;
                 EdgeCount = edgeCount;
             }
 
@@ -427,8 +960,9 @@ namespace Sonosthesia.ProcGeo
             public float[] TipWeights { get; }
             public float[] Flexibilities { get; }
             public float[] Stiffnesses { get; }
-            public uint[] VertexPathIndices { get; }
-            public Vector2[] CrossSectionPositions { get; }
+            public uint[] SkinIndices { get; }
+            public float[] SkinWeights { get; }
+            public Vector3[] SkinOffsets { get; }
             public int EdgeCount { get; }
         }
     }

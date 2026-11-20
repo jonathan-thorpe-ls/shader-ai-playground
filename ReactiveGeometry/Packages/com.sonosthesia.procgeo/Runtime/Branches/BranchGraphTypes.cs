@@ -20,7 +20,8 @@ namespace Sonosthesia.ProcGeo
         [Min(1)] public int minimumSamples;
         [Min(1)] public int samplesPerUnitLength;
         [Min(1)] public int maximumSamplesPerBranch;
-        [Min(3)] public int radialSegments;
+        [Min(0.01f)] public float meshCellSize;
+        [Min(0f)] public float meshSmoothingRadius;
         [Min(1)] public int maximumBranches;
         [Min(2)] public int maximumPathSamples;
         [Range(0f, 1f)] public float tipInfluenceStart;
@@ -45,7 +46,8 @@ namespace Sonosthesia.ProcGeo
             minimumSamples = 3,
             samplesPerUnitLength = 5,
             maximumSamplesPerBranch = 24,
-            radialSegments = 8,
+            meshCellSize = 0.08f,
+            meshSmoothingRadius = 0.12f,
             maximumBranches = 128,
             maximumPathSamples = 2048,
             tipInfluenceStart = 0.25f,

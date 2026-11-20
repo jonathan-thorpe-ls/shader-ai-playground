@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -97,9 +98,6 @@ namespace Sonosthesia.ProcGeo.Tests
             uint[] failure = new uint[1];
             context.Resource.Topology.Scratch.Failure.GetData(failure);
             Assert.That(failure[0], Is.Zero);
-            ValidationResult[] validation = new ValidationResult[1];
-            context.Resource.ValidationResult.GetData(validation);
-            Assert.That(validation[0].ErrorCount, Is.Zero);
             Assert.That(
                 Array.TrueForAll(
                     context.Generator.DebugTriangles,
@@ -107,6 +105,102 @@ namespace Sonosthesia.ProcGeo.Tests
                         triangle.y != triangle.z &&
                         triangle.z != triangle.x),
                 Is.True);
+            for (int i = 0; i < context.Generator.DebugTriangles.Length; i++)
+            {
+                Vector3Int triangle = context.Generator.DebugTriangles[i];
+                Vector3 normal = Vector3.Cross(
+                    context.Generator.DebugPositions[triangle.y] -
+                    context.Generator.DebugPositions[triangle.x],
+                    context.Generator.DebugPositions[triangle.z] -
+                    context.Generator.DebugPositions[triangle.x]);
+                Assert.That(
+                    normal.magnitude,
+                    Is.GreaterThan(0f),
+                    $"Triangle {i}: {triangle}; " +
+                    $"{context.Generator.DebugPositions[triangle.x]}, " +
+                    $"{context.Generator.DebugPositions[triangle.y]}, " +
+                    $"{context.Generator.DebugPositions[triangle.z]}");
+            }
+            ValidationResult[] validation = new ValidationResult[1];
+            context.Resource.ValidationResult.GetData(validation);
+            string firstDetail = "";
+            uint first = validation[0].FirstElement;
+            if (first >= (uint)context.Resource.Layout.VertexCount &&
+                first < (uint)(context.Resource.Layout.VertexCount +
+                    context.Resource.Layout.EdgeCapacity))
+            {
+                int edge = (int)first - context.Resource.Layout.VertexCount;
+                Vector2Int[] edges = Read<Vector2Int>(
+                    context.Resource.Topology.Edges);
+                uint[] faces = Read<uint>(
+                    context.Resource.Topology.EdgeFaceCounts);
+                float[] lengths = Read<float>(
+                    context.Resource.Topology.EdgeRestLength);
+                firstDetail =
+                    $"; edge {edge} {edges[edge]} faces {faces[edge]} " +
+                    $"length {lengths[edge]}";
+            }
+            Assert.That(
+                validation[0].ErrorCount,
+                Is.Zero,
+                $"First invalid element {validation[0].FirstElement}; " +
+                $"vertices {context.Resource.Layout.VertexCount}, " +
+                $"edges {context.Resource.Layout.EdgeCapacity}, " +
+                $"triangles {context.Resource.Layout.PrimitiveCount}" +
+                firstDetail);
+        }
+
+        [Test]
+        public void UnifiedMeshIsClosedAndSupportsFourChildrenPerNode()
+        {
+            Assume.That(
+                SystemInfo.supportsComputeShaders,
+                "A graphics compute device is required.");
+            BranchGenerationSettings settings = SmallSettings();
+            settings.branchesPerNode = 4;
+            settings.maximumBranches = 64;
+            settings.maximumPathSamples = 256;
+            settings.meshCellSize = 0.09f;
+            using BranchTestContext context =
+                BranchTestContext.Build(settings);
+
+            IReadOnlyList<string> errors =
+                TopologyValidator.Validate(context.Resource);
+            Assert.That(errors, Is.Empty, string.Join(Environment.NewLine, errors));
+            uint[] faceCounts = Read<uint>(
+                context.Resource.Topology.EdgeFaceCounts);
+            Assert.That(
+                Array.TrueForAll(faceCounts, count => count == 2u),
+                Is.True);
+            float[] boundary = Read<float>(
+                context.Resource.Attributes
+                    .Require(AttributeIds.BoundaryWeight).Buffer);
+            Assert.That(Array.TrueForAll(
+                boundary, value => Mathf.Abs(value) < 1e-6f), Is.True);
+            Dictionary<long, int> directions = new();
+            foreach (Vector3Int triangle in context.Generator.DebugTriangles)
+            {
+                AssertEdgeDirection(triangle.x, triangle.y);
+                AssertEdgeDirection(triangle.y, triangle.z);
+                AssertEdgeDirection(triangle.z, triangle.x);
+            }
+            Assert.That(directions, Is.Empty);
+
+            void AssertEdgeDirection(int a, int b)
+            {
+                long key = ((long)Mathf.Min(a, b) << 32) |
+                    (uint)Mathf.Max(a, b);
+                int direction = a < b ? 1 : -1;
+                if (directions.TryGetValue(key, out int previous))
+                {
+                    Assert.That(direction, Is.EqualTo(-previous));
+                    directions.Remove(key);
+                }
+                else
+                {
+                    directions.Add(key, direction);
+                }
+            }
         }
 
         [Test]
@@ -128,8 +222,10 @@ namespace Sonosthesia.ProcGeo.Tests
             {
                 int pathIndex = (int)data.VertexPathIndices[i];
                 Assert.That(
-                    Vector3.Distance(basePositions[i], path[pathIndex]),
-                    Is.EqualTo(data.CrossSectionPositions[i].magnitude).Within(0.001f),
+                    Vector3.Distance(
+                        basePositions[i],
+                        context.Generator.DebugPositions[i]),
+                    Is.LessThan(0.001f),
                     $"Vertex {i}");
             }
         }
@@ -211,7 +307,6 @@ namespace Sonosthesia.ProcGeo.Tests
             settings.minimumSamples = 3;
             settings.samplesPerUnitLength = 3;
             settings.maximumSamplesPerBranch = 10;
-            settings.radialSegments = 6;
             settings.maximumBranches = 32;
             settings.maximumPathSamples = 128;
             settings.seed = 90210;
@@ -365,13 +460,18 @@ namespace Sonosthesia.ProcGeo.Tests
             public BranchPathDeformationPipeline Pipeline { get; private set; }
             private GeometryCommandScheduler _scheduler;
 
-            public static BranchTestContext Build()
+            public static BranchTestContext Build(
+                BranchGenerationSettings? settingsOverride = null)
             {
                 BranchTestContext result = new();
+                BranchGenerationSettings settings =
+                    settingsOverride ?? SmallSettings();
                 BranchGraphPlan plan =
-                    new TreeBranchGenerator().Plan(SmallSettings());
+                    new TreeBranchGenerator().Plan(settings);
                 result.Generator = new BranchGeometryGenerator(
-                    plan, SmallSettings().radialSegments);
+                    plan,
+                    settings.meshCellSize,
+                    settings.meshSmoothingRadius);
                 result.Resource = new GeometryResource(result.Generator.Plan());
                 result._scheduler = new GeometryCommandScheduler(
                     "Phase 6 Branch Test");

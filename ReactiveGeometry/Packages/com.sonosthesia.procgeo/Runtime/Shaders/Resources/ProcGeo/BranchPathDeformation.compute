@@ -35,7 +35,8 @@ RWStructuredBuffer<float3> _LivePathNormals;
 RWStructuredBuffer<float3> _LivePathBinormals;
 
 StructuredBuffer<uint> _VertexPathIndices;
-StructuredBuffer<float2> _CrossSections;
+StructuredBuffer<float> _SkinWeights;
+StructuredBuffer<float3> _SkinOffsets;
 RWStructuredBuffer<float3> _BasePositions;
 RWStructuredBuffer<float3> _BaseNormals;
 RWStructuredBuffer<float3> _BaseTangents;
@@ -317,14 +318,30 @@ void SkinBranchGeometry(uint3 dispatchId : SV_DispatchThreadID)
     uint vertex = dispatchId.x;
     if (vertex >= _VertexCount)
         return;
-    uint sample = _VertexPathIndices[vertex];
-    float2 section = _CrossSections[vertex];
-    float3 radial = _LivePathNormals[sample] * section.x +
-        _LivePathBinormals[sample] * section.y;
-    _BasePositions[vertex] = _LivePathPositions[sample] + radial;
+    float3 position = 0.0;
+    float3 radial = 0.0;
+    float3 tangent = 0.0;
+    for (uint influence = 0; influence < 4; influence++)
+    {
+        uint binding = vertex * 4 + influence;
+        uint sample = _VertexPathIndices[binding];
+        float3 offset = _SkinOffsets[binding];
+        float3 samplePosition = _LivePathPositions[sample] +
+            _LivePathTangents[sample] * offset.x +
+            _LivePathNormals[sample] * offset.y +
+            _LivePathBinormals[sample] * offset.z;
+        float weight = _SkinWeights[binding];
+        position += samplePosition * weight;
+        radial += (
+            _LivePathNormals[sample] * offset.y +
+            _LivePathBinormals[sample] * offset.z) * weight;
+        tangent += _LivePathTangents[sample] * weight;
+    }
+    _BasePositions[vertex] = position;
     _BaseNormals[vertex] = SafeNormalize(
-        radial, _LivePathNormals[sample]);
-    _BaseTangents[vertex] = _LivePathTangents[sample];
+        radial, float3(0.0, 1.0, 0.0));
+    _BaseTangents[vertex] = SafeNormalize(
+        tangent, float3(0.0, 1.0, 0.0));
 }
 
 [numthreads(64, 1, 1)]

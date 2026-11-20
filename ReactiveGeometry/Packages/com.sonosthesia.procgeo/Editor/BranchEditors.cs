@@ -33,7 +33,7 @@ namespace Sonosthesia.ProcGeo.Editor
             Label counts = new(
                 $"{renderer.BranchCount} branches, " +
                 $"{renderer.PathSampleCount} path samples, " +
-                $"{renderer.VertexCount} tube vertices");
+                $"{renderer.VertexCount} unified mesh vertices");
             root.Add(counts);
 
             VisualElement actions = new();

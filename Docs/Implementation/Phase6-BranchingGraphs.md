@@ -12,7 +12,7 @@ GPU procedural-geometry framework described in
 | Runtime source of truth | Immutable branch graph plus GPU rest/live branch-path state |
 | First deformation primitives | Tip-weighted turbulence and spatial attraction |
 | Phase gate | Root and thick lower branches move less than thin terminal tips; child branches remain attached at every junction |
-| Rendering slice | Line/glyph graph first, then independent tube skins per branch |
+| Rendering slice | Line/glyph graph plus one closed, unified branch mesh |
 | UI | Simple functional UI Toolkit component inspectors |
 | Testing | deterministic plans, GPU invariants, deformation tests, lifecycle and PlayMode rendering |
 
@@ -23,23 +23,25 @@ The Phase 6 branching vertical slice is implemented in `ReactiveGeometry/`:
 - deterministic tree planning with stable branch identity, topology and
   root/junction/tip metadata;
 - packed branch-path GPU resources with Phase 5-compatible rest/live frames and
-  branch-local tube bindings;
+  unified graph-skin bindings;
 - depth-ordered hierarchy attachment that keeps child starts on live parent
   junctions;
 - radius/depth/local-tip flexibility with bounded direct path deformation;
 - GPU wind-like `BranchTurbulenceDeformer` and
   transform/local-target `BranchAttractorDeformer`;
-- independently skinned branch tubes with line/glyph and one-shot live graph
+- a unified closed branch mesh with line/glyph and one-shot live graph
   overlays;
 - a functional `Phase6/01_BranchGraphs` scene and UI Toolkit component
   inspectors;
 - EditMode topology, attachment, deformation and lifecycle tests plus a
   PlayMode rendering smoke test.
 
-The first implementation deliberately keeps branch tubes overlapping at
-junctions rather than producing one watertight surface. Dynamic path forces,
-particle networks, arbitrary cyclic graphs and Voronoi remain outside the
-branching phase gate.
+The implemented surface is generated as one immutable marching-tetrahedron mesh
+from the union of all tapered branch capsules. It closes roots, terminal tips
+and one-to-four-way junctions without duplicate branch tubes. Mesh vertices use
+four-sample graph-frame skin bindings, so junction continuity survives live
+deformation. Dynamic path forces, particle networks, arbitrary cyclic graphs and
+Voronoi remain outside the branching phase gate.
 
 ## 1. Purpose
 
@@ -70,7 +72,7 @@ same deformation primitives.
 7. Hierarchical attachment propagation before live path-frame reconstruction.
 8. A configurable deterministic tree generator.
 9. Wind-like branch turbulence and transform-authored attractor deformation.
-10. Line/glyph rendering for topology validation and independent tube skins for
+10. Line/glyph rendering for topology validation and one closed unified mesh for
     visual geometry.
 11. UI Toolkit inspectors, focused scenes, automated tests, performance presets
     and buffer-lifecycle validation.
@@ -78,8 +80,7 @@ same deformation primitives.
 ### 2.2 Explicitly out of scope
 
 - Rebuilding branch topology, sample counts or radii during play.
-- A single watertight surface across branch junctions, mesh booleans or
-  subdivision surfaces.
+- Runtime CSG, per-frame remeshing or subdivision surfaces.
 - Physical collision, self-collision or full torsion/rod dynamics.
 - Particle networks, spatial grids, Voronoi and cyclic arbitrary graphs.
 - Audio mapping; Phase 7 supplies controls to the path deformers.
@@ -90,7 +91,7 @@ same deformation primitives.
 ## 3. Design principles
 
 1. **The graph is not the rendered mesh.** One graph plan can feed lines,
-   points, branch tubes or later secondary geometry.
+   points, a unified branch mesh or later secondary geometry.
 2. **Branches reuse paths.** A branch is an open ordered path with an optional
    parent attachment, not another copy of tube-frame reconstruction.
 3. **Hierarchy is an attachment constraint.** Child roots follow their parent
@@ -262,7 +263,7 @@ The branch pipeline extends the Phase 5 order:
 4. Apply root/fixed constraints and bounded displacement
 5. Reconstruct live path tangents and transported frames
 6. Correct path-local frame continuity
-7. Skin branch line/tube geometry from committed live paths
+7. Skin the unified branch mesh from committed live graph paths
 8. Recompute branch base normals
 9. Evaluate optional vertex deformers
 10. Compose/publish final geometry and render/debug state
@@ -403,21 +404,35 @@ Implement a branch graph line/glyph representation before surface skinning:
 This is a diagnostic output and a valid first sample, not the final visual
 surface.
 
-### 9.2 Tube skins
+### 9.2 Unified closed surface
 
-Reuse Phase 5 path frame and tube skinning for each branch. Each branch owns
-immutable ring/cross-section bindings and radius-over-distance data. Generate
-the branch tubes in a packed vertex/index range and skin them from the packed
-path set.
+The complete skeleton is converted to one capped tapered-capsule distance
+field. A bounded polynomial smooth-min blends capsule fields at junctions.
+Marching tetrahedra extracts a single indexed surface with shared graph
+junction topology; grid-edge vertices are welded deterministically and numeric
+degeneracies are relaxed at generation time without changing connectivity.
+An edge-based orientation pass makes every adjacent pair oppose consistently,
+then flips the complete connected surface to positive signed volume.
+The process supports one to four children per node and produces closed root
+and terminal ends.
 
-The initial junction policy is explicit visual overlap: a child tube starts at
-its parent attachment and may overlap/interpenetrate the parent. Watertight
-junction topology is a later rendering enhancement. This keeps branch path
-deformation testable without coupling it to remeshing.
+Each mesh vertex stores four graph-sample indices, weights and rest-local
+frame offsets. Runtime skinning evaluates:
 
-Branch normals are recomputed in the same downstream path-skinning stage.
-Tube ring radius is immutable before the optional vertex stage, matching the
-Phase 5 cross-section invariant.
+```text
+position = sum(weight[i] * (
+    livePosition[sample[i]]
+  + liveTangent[sample[i]]  * restOffset[i].x
+  + liveNormal[sample[i]]   * restOffset[i].y
+  + liveBinormal[sample[i]] * restOffset[i].z))
+```
+
+Regular branch vertices are dominated by their nearest path samples. Vertices
+near a junction receive multiple incident branch influences, allowing the
+shared surface to follow all incoming and outgoing live frames without cracks.
+Normals and mesh bounds are recomputed/published through the existing
+GPU-owned pipeline. Topology, sample bindings and radius data remain immutable
+at runtime.
 
 ## 10. Authoring and test scenes
 
@@ -443,10 +458,7 @@ Required inspector functionality:
 Recommended scenes:
 
 ```text
-Phase6/01_BranchGraphTopology
-Phase6/02_BranchPathTurbulence
-Phase6/03_BranchPathAttractor
-Phase6/04_BranchTubeSkins
+Phase6/01_BranchGraphs
 ```
 
 ## 11. Proposed package layout
@@ -534,9 +546,9 @@ confirms the smallest compatible API change.
 
 ### 12.3 Path and rendering
 
-- Identity skinning reproduces Phase 5 path rest positions.
-- Branch tube rings preserve authored radius, ordering and winding before the
-  vertex stage.
+- Identity skinning reproduces every generated mesh rest position.
+- Shared junction vertices remain single welded vertices; every edge has
+  exactly two triangles and default presets have no boundary vertices.
 - Frame reconstruction remains finite at branch ends.
 - Final normals follow the branch-skinned base pose.
 - Enabling only hierarchy attachment does not produce per-branch drift.
@@ -549,7 +561,7 @@ confirms the smallest compatible API change.
 - No branch update performs per-branch managed allocation or topology rebuild.
 - Dispatch count is bounded by path work plus configured maximum generation
   depth, and is published per preset.
-- Record branch, path sample, node, edge, tube vertex and primitive counts.
+- Record branch, path sample, node, edge, mesh vertex and primitive counts.
 - Record path deformation, hierarchy, frames, skinning, normals and draw cost.
 - Record GPU bytes, allocation churn and buffer reuse.
 - Establish small/medium/large presets on the same target graphics API and
@@ -603,14 +615,15 @@ branches move more than lower/larger branches.
 **Gate:** branch tips move towards the target with intact attachments and the
 root remains fixed.
 
-### M6 - Tube skins and authoring
+### M6 - Unified closed mesh and authoring
 
-- Build packed branch-tube bindings from Phase 5 path data.
+- Build marching-tetrahedron surface and packed graph-skin bindings.
 - Add line, glyph, rest/live, ID and metadata views.
-- Add simple UI Toolkit component inspectors and four listed scenes.
+- Add simple UI Toolkit component inspectors and a functional four-child scene.
 
-**Gate:** tree tube skins preserve every branch ring before optional vertex
-deformation and the scenes require no runtime control panel.
+**Gate:** the generated tree mesh is closed and manifold, one-to-four-way
+junctions share welded topology, identity skinning reproduces the rest surface,
+and the scene requires no runtime control panel.
 
 ### M7 - Performance and regression
 
@@ -631,7 +644,7 @@ tests pass.
 | Turbulence appears as vertex noise rather than branch bending | apply it at the path domain before frame reconstruction and skinning |
 | Attractor shortens or translates whole branches | use perpendicular path contribution, bounded bend/displacement and hierarchy attachment |
 | Parallel transport flips at sharp branch curves | use Phase 5 finite-frame rules and deterministic fallback plus stress tests |
-| Branch tubes expose gaps at junctions | document independent overlapping tube skins for Phase 6; defer watertight junctions |
+| Grid extraction produces tangent/degenerate faces | deterministic field perturbation and bounded generation-time vertex relaxation, with manifold validation |
 | Branch IDs interpolated as floats | keep all IDs discrete in their own integer attributes |
 | Exponential generators exceed GPU caps | validate plan counts before resource allocation and reject over-limit settings |
 | Graph-specific deformers prevent reuse | keep deformation contracts path/metadata based and validate on an isolated branch and cable |
@@ -644,9 +657,9 @@ Phase 6 is complete when:
 
 1. a deterministic graph plan represents rooted branches, paths, hierarchy and
    stable identities without depending on a renderer;
-2. the same tree plan supports line/glyph and tube representations;
-3. packed branch paths reuse Phase 5 sampling, frame reconstruction and
-   path-skinning rules;
+2. the same tree plan supports line/glyph and closed mesh representations;
+3. packed branch paths reuse Phase 5 sampling and frame reconstruction while
+   unified graph-skin bindings own final mesh positions;
 4. every child branch remains attached to its parent live junction;
 5. required branch and response metadata is generated once and available on GPU;
 6. turbulence and attraction act at the path domain, not as final-vertex
@@ -655,10 +668,13 @@ Phase 6 is complete when:
    tested authoring model;
 8. isolated paths and branch paths can use the same deformer implementations;
 9. direct controls are deterministic, bounded and resettable;
-10. UI Toolkit component inspectors and four functional test scenes are present;
+10. UI Toolkit component inspectors and a functional Phase 6 test scene are
+    present;
 11. topology, attachment, deformation, rendering and lifecycle tests pass;
 12. supported presets meet documented real-time dispatch, memory and allocation
     budgets;
-13. no runtime branch update performs readback or topology rebuilding;
-14. audio remains an input to branch path controls for Phase 7, while XR remains
+13. every generated edge belongs to exactly two triangles and default meshes
+    have no boundary vertices;
+14. no runtime branch update performs readback or topology rebuilding;
+15. audio remains an input to branch path controls for Phase 7, while XR remains
     an input for Phase 8.

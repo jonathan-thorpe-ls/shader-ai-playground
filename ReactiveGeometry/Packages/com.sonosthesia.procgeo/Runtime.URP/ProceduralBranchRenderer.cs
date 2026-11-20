@@ -62,7 +62,9 @@ namespace Sonosthesia.ProcGeo
                 BranchGraphPlan plan =
                     new TreeBranchGenerator().Plan(settings);
                 _generator = new BranchGeometryGenerator(
-                    plan, settings.radialSegments);
+                    plan,
+                    settings.meshCellSize,
+                    settings.meshSmoothingRadius);
                 _resource = new GeometryResource(_generator.Plan());
                 _generationScheduler = new GeometryCommandScheduler(
                     $"ProcGeo Branch Generate {name}");
@@ -111,7 +113,7 @@ namespace Sonosthesia.ProcGeo
                 Debug.Log(
                     $"Generated {_generator.GraphPlan.BranchCount} branches, " +
                     $"{_generator.GraphPlan.SampleCount} path samples and " +
-                    $"{_generator.VertexCount} tube vertices for {name}.",
+                    $"{_generator.VertexCount} closed mesh vertices for {name}.",
                     this);
             }
             catch
@@ -178,11 +180,18 @@ namespace Sonosthesia.ProcGeo
         private void OnEnable()
         {
             Generate();
+            DisableScenePicking();
         }
 
         private void OnValidate()
         {
-            settings.radialSegments = Mathf.Clamp(settings.radialSegments, 3, 32);
+            settings.meshCellSize = settings.meshCellSize > 0f
+                ? Mathf.Max(0.01f, settings.meshCellSize)
+                : BranchGenerationSettings.Default.meshCellSize;
+            settings.meshSmoothingRadius =
+                settings.meshSmoothingRadius > 0f
+                    ? settings.meshSmoothingRadius
+                    : BranchGenerationSettings.Default.meshSmoothingRadius;
             if (_resource != null && isActiveAndEnabled &&
                 !settings.Equals(_generatedSettings))
             {
@@ -241,6 +250,14 @@ namespace Sonosthesia.ProcGeo
 
         private void OnDisable() => Release();
         private void OnDestroy() => Release();
+
+        private void DisableScenePicking()
+        {
+#if UNITY_EDITOR
+            UnityEditor.SceneVisibilityManager.instance.DisablePicking(
+                gameObject, true);
+#endif
+        }
 
         private void OnDrawGizmosSelected()
         {

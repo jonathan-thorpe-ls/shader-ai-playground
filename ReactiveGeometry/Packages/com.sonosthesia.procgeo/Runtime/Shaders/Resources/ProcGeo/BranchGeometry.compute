@@ -133,9 +133,9 @@ void CopyBranchHeader(uint3 dispatchId : SV_DispatchThreadID)
     header.edgeCount = _EdgeCount;
     header.regionCount = _RegionCount;
     header.boundsMin = _BoundsMin;
-    header.flags = 4;
+    header.flags = 3;
     header.boundsMax = _BoundsMax;
-    header.maxDegree = 8;
+    header.maxDegree = 32;
     _Header[0] = header;
     _DrawArgs.Store(0, _PrimitiveCount * 3);
     _DrawArgs.Store(4, 1);

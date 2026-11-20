@@ -25,7 +25,8 @@ namespace Sonosthesia.ProcGeo
         {
             _geometry = geometry ?? throw new ArgumentNullException(nameof(geometry));
             if (data == null) throw new ArgumentNullException(nameof(data));
-            if (data.VertexPathIndices.Length != geometry.Layout.VertexCount)
+            if (data.VertexPathIndices.Length !=
+                geometry.Layout.VertexCount * 4)
             {
                 throw new ArgumentException(
                     "The branch path binding does not match the geometry.",
@@ -155,7 +156,8 @@ namespace Sonosthesia.ProcGeo
         private void BindSkin(CommandBuffer command)
         {
             Set("_VertexPathIndices", Buffers.VertexPathIndices);
-            Set("_CrossSections", Buffers.CrossSections);
+            Set("_SkinWeights", Buffers.SkinWeights);
+            Set("_SkinOffsets", Buffers.SkinOffsets);
             Set("_LivePathPositions", _paths.LivePositions);
             Set("_LivePathTangents", _paths.LiveTangents);
             Set("_LivePathNormals", _paths.LiveNormals);
