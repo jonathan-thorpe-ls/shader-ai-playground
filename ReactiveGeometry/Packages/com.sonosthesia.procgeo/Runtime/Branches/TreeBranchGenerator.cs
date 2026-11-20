@@ -359,6 +359,14 @@ namespace Sonosthesia.ProcGeo
                 settings.samplesPerUnitLength, 1, 32);
             settings.maximumSamplesPerBranch = Mathf.Max(
                 settings.maximumSamplesPerBranch, settings.minimumSamples);
+            settings.radialSegments = Mathf.Clamp(
+                settings.radialSegments, 3, 32);
+            settings.junctionRings = Mathf.Clamp(
+                settings.junctionRings, 1, 4);
+            settings.junctionSubdivisions = Mathf.Clamp(
+                settings.junctionSubdivisions, 0, 2);
+            settings.junctionThroatScale = Mathf.Clamp(
+                settings.junctionThroatScale, 0.5f, 3f);
             settings.meshCellSize = Mathf.Max(settings.meshCellSize, 0.01f);
             settings.meshSmoothingRadius =
                 Mathf.Max(settings.meshSmoothingRadius, 0f);

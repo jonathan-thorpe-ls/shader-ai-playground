@@ -17,6 +17,8 @@ namespace Sonosthesia.ProcGeo.Tests
             BranchGenerationSettings settings =
                 BranchGenerationSettings.Default;
             settings.maximumDepth = 2;
+            settings.meshVariant = BranchMeshVariant.PortJunction;
+            settings.branchesPerNode = 2;
             settings.meshCellSize = 0.09f;
             settings.branchesPerNode = 2;
             settings.minimumSamples = 3;

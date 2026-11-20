@@ -66,9 +66,40 @@ namespace Sonosthesia.ProcGeo
             float meshCellSize = 0.08f,
             float meshSmoothingRadius = 0.12f,
             ComputeShader shader = null)
+            : this(
+                plan,
+                BranchMeshVariant.ImplicitUnion,
+                12,
+                2,
+                1,
+                0.75f,
+                meshCellSize,
+                meshSmoothingRadius,
+                shader)
+        {
+        }
+
+        public BranchGeometryGenerator(
+            BranchGraphPlan plan,
+            BranchMeshVariant variant,
+            int radialSegments,
+            int junctionRings = 2,
+            int junctionSubdivisions = 1,
+            float junctionThroatScale = 0.75f,
+            float meshCellSize = 0.08f,
+            float meshSmoothingRadius = 0.12f,
+            ComputeShader shader = null)
         {
             _plan = plan ?? throw new ArgumentNullException(nameof(plan));
-            _data = Build(plan, meshCellSize, meshSmoothingRadius);
+            _data = Build(
+                plan,
+                variant,
+                radialSegments,
+                junctionRings,
+                junctionSubdivisions,
+                junctionThroatScale,
+                meshCellSize,
+                meshSmoothingRadius);
             _shader = shader != null
                 ? shader
                 : Resources.Load<ComputeShader>("ProcGeo/BranchGeometry")
@@ -274,6 +305,32 @@ namespace Sonosthesia.ProcGeo
         }
 
         private static BranchMeshData Build(
+            BranchGraphPlan plan,
+            BranchMeshVariant variant,
+            int radialSegments,
+            int junctionRings,
+            int junctionSubdivisions,
+            float junctionThroatScale,
+            float meshCellSize,
+            float meshSmoothingRadius)
+        {
+            return variant switch
+            {
+                BranchMeshVariant.ImplicitUnion =>
+                    BuildImplicitUnion(plan, meshCellSize, meshSmoothingRadius),
+                BranchMeshVariant.PortJunction =>
+                    BuildPortJunction(
+                        plan,
+                        radialSegments,
+                        junctionRings,
+                        junctionThroatScale,
+                        junctionSubdivisions),
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(variant), variant, null)
+            };
+        }
+
+        private static BranchMeshData BuildImplicitUnion(
             BranchGraphPlan plan,
             float meshCellSize,
             float meshSmoothingRadius)
@@ -523,6 +580,829 @@ namespace Sonosthesia.ProcGeo
                 skinWeights.ToArray(),
                 skinOffsets.ToArray(),
                 edges.Count);
+        }
+
+        private static BranchMeshData BuildPortJunction(
+            BranchGraphPlan plan,
+            int radialSegments,
+            int junctionRings,
+            float junctionThroatScale,
+            int junctionSubdivisions)
+        {
+            radialSegments = Mathf.Clamp(radialSegments, 3, 32);
+            junctionRings = Mathf.Clamp(junctionRings, 1, 4);
+            if ((radialSegments & 1) != 0)
+                radialSegments++;
+
+            List<Vector3> positions = new();
+            List<Vector3> normals = new();
+            List<Vector4> tangents = new();
+            List<Vector2> coordinates = new();
+            List<uint> branchIds = new();
+            List<float> rootDistances = new();
+            List<float> tipDistances = new();
+            List<float> localDistances = new();
+            List<float> localPositions = new();
+            List<uint> depths = new();
+            List<float> radii = new();
+            List<float> tipWeights = new();
+            List<float> flexibilities = new();
+            List<float> stiffnesses = new();
+            List<int> skinSamples = new();
+            List<Vector3Int> triangles = new();
+            List<uint> regions = new();
+            int[][] rings = new int[plan.SampleCount][];
+            List<int>[] children = new List<int>[plan.BranchCount];
+            for (int branch = 0; branch < plan.BranchCount; branch++)
+            {
+                children[branch] = new List<int>();
+                BranchRecord record = plan.Branches[branch];
+                if (record.ParentId != uint.MaxValue)
+                    children[(int)record.ParentId].Add(branch);
+            }
+
+            for (int branchIndex = 0;
+                branchIndex < plan.BranchCount;
+                branchIndex++)
+            {
+                BranchRecord branch = plan.Branches[branchIndex];
+                int first = branch.ParentId == uint.MaxValue ? 0 : 1;
+                int last = branch.Terminal
+                    ? (int)branch.SampleCount - 1
+                    : (int)branch.SampleCount - 2;
+                if (last < first)
+                {
+                    throw new InvalidOperationException(
+                        $"Branch {branch.Id} does not contain enough samples for PortJunction.");
+                }
+                for (int sample = first; sample <= last; sample++)
+                {
+                    int pathSample = (int)branch.SampleOffset + sample;
+                    rings[pathSample] = CreateRing(
+                        pathSample,
+                        radialSegments,
+                        sample / (float)Mathf.Max(1, branch.SampleCount - 1));
+                    if (sample < last)
+                    {
+                        int next = (int)branch.SampleOffset + sample + 1;
+                        rings[next] = CreateRing(
+                            next,
+                            radialSegments,
+                            (sample + 1) /
+                                (float)Mathf.Max(1, branch.SampleCount - 1));
+                        ConnectFullLoops(
+                            rings[pathSample],
+                            rings[next],
+                            triangles,
+                            regions,
+                            branch.Id);
+                    }
+                }
+                if (branch.ParentId == uint.MaxValue)
+                    AddCap(rings[(int)branch.SampleOffset], true, branch.Id);
+                if (branch.Terminal)
+                    AddCap(
+                        rings[(int)(branch.SampleOffset + branch.SampleCount - 1)],
+                        false,
+                        branch.Id);
+            }
+
+            for (int parentIndex = 0;
+                parentIndex < plan.BranchCount;
+                parentIndex++)
+            {
+                List<int> childBranches = children[parentIndex];
+                if (childBranches.Count == 0)
+                    continue;
+                if (childBranches.Count > 2)
+                {
+                    throw new InvalidOperationException(
+                        $"PortJunction supports one or two children per node; branch {parentIndex} has {childBranches.Count}.");
+                }
+                BranchRecord parent = plan.Branches[parentIndex];
+                int parentSample =
+                    (int)(parent.SampleOffset + parent.SampleCount - 2);
+                int[] parentRing = rings[parentSample];
+                int junctionSample =
+                    (int)(parent.SampleOffset + parent.SampleCount - 1);
+                int firstChildSample =
+                    (int)plan.Branches[childBranches[0]].SampleOffset + 1;
+                int[] firstChildRing = rings[firstChildSample];
+                List<int[]> parentRings = CreateJunctionRings(
+                    parentRing,
+                    parentSample,
+                    junctionSample);
+                List<int[]> firstChildRings = CreateJunctionRings(
+                    firstChildRing,
+                    firstChildSample,
+                    junctionSample);
+                if (childBranches.Count == 1)
+                {
+                    int[] previous = parentRing;
+                    foreach (int[] ring in parentRings)
+                    {
+                        ConnectFullLoops(
+                            previous, AlignLoop(ring, previous),
+                            triangles, regions, parent.Id);
+                        previous = AlignLoop(ring, previous);
+                    }
+                    for (int i = firstChildRings.Count - 1; i >= 0; i--)
+                    {
+                        int[] next = AlignLoop(
+                            firstChildRings[i], previous);
+                        ConnectFullLoops(
+                            previous, next,
+                            triangles, regions, parent.Id);
+                        previous = next;
+                    }
+                    ConnectFullLoops(
+                        previous,
+                        AlignLoop(firstChildRing, previous),
+                        triangles,
+                        regions,
+                        parent.Id);
+                    continue;
+                }
+                int secondChildSample =
+                    (int)plan.Branches[childBranches[1]].SampleOffset + 1;
+                List<int[]> secondChildRings = CreateJunctionRings(
+                    rings[secondChildSample],
+                    secondChildSample,
+                    junctionSample);
+                ConnectPortRings(parentRing, parentRings, parent.Id);
+                ConnectPortRings(
+                    rings[firstChildSample],
+                    firstChildRings,
+                    (uint)childBranches[0]);
+                ConnectPortRings(
+                    rings[secondChildSample],
+                    secondChildRings,
+                    (uint)childBranches[1]);
+                ConnectYJunction(
+                    parentRings[parentRings.Count - 1],
+                    firstChildRings[firstChildRings.Count - 1],
+                    secondChildRings[secondChildRings.Count - 1],
+                    triangles,
+                    regions,
+                    parent.Id);
+            }
+
+            OrientTrianglesConsistently(positions, triangles);
+            for (int subdivision = 0;
+                subdivision < Mathf.Clamp(junctionSubdivisions, 0, 2);
+                subdivision++)
+            {
+                SubdividePortJunction(
+                    plan,
+                    positions,
+                    normals,
+                    tangents,
+                    coordinates,
+                    branchIds,
+                    rootDistances,
+                    tipDistances,
+                    localDistances,
+                    localPositions,
+                    depths,
+                    radii,
+                    tipWeights,
+                    flexibilities,
+                    stiffnesses,
+                    skinSamples,
+                    triangles,
+                    regions);
+            }
+            RelaxJunctionPositions(
+                positions,
+                triangles,
+                6);
+            List<uint> skinIndices = new(positions.Count * 4);
+            List<float> skinWeights = new(positions.Count * 4);
+            List<Vector3> skinOffsets = new(positions.Count * 4);
+            BuildDirectSkinBindings(
+                skinSamples,
+                plan,
+                positions,
+                skinIndices,
+                skinWeights,
+                skinOffsets);
+            HashSet<long> edges = new();
+            foreach (Vector3Int triangle in triangles)
+            {
+                AddEdge(edges, triangle.x, triangle.y);
+                AddEdge(edges, triangle.y, triangle.z);
+                AddEdge(edges, triangle.z, triangle.x);
+            }
+            return new BranchMeshData(
+                positions.ToArray(),
+                normals.ToArray(),
+                tangents.ToArray(),
+                coordinates.ToArray(),
+                triangles.ToArray(),
+                regions.ToArray(),
+                branchIds.ToArray(),
+                rootDistances.ToArray(),
+                tipDistances.ToArray(),
+                localDistances.ToArray(),
+                localPositions.ToArray(),
+                depths.ToArray(),
+                radii.ToArray(),
+                tipWeights.ToArray(),
+                flexibilities.ToArray(),
+                stiffnesses.ToArray(),
+                skinIndices.ToArray(),
+                skinWeights.ToArray(),
+                skinOffsets.ToArray(),
+                edges.Count);
+
+            int[] CreateRing(
+                int pathSample,
+                int sides,
+                float ringPosition)
+            {
+                if (rings[pathSample] != null)
+                    return rings[pathSample];
+                BranchSample sample = plan.Samples[pathSample];
+                int[] result = new int[sides];
+                for (int side = 0; side < sides; side++)
+                {
+                    float angle = side / (float)sides * Mathf.PI * 2f;
+                    Vector2 section = new(
+                        Mathf.Cos(angle) * sample.Radius,
+                        Mathf.Sin(angle) * sample.Radius);
+                    Vector3 radial =
+                        sample.Normal * section.x +
+                        sample.Binormal * section.y;
+                    int vertex = positions.Count;
+                    result[side] = vertex;
+                    positions.Add(sample.Position + radial);
+                    normals.Add(radial.normalized);
+                    tangents.Add(new Vector4(
+                        sample.Tangent.x,
+                        sample.Tangent.y,
+                        sample.Tangent.z,
+                        1f));
+                    coordinates.Add(new Vector2(
+                        ringPosition,
+                        side / (float)sides));
+                    branchIds.Add(sample.BranchId);
+                    rootDistances.Add(sample.DistanceFromRoot);
+                    tipDistances.Add(sample.DistanceToTip);
+                    localDistances.Add(sample.LocalDistance);
+                    localPositions.Add(sample.LocalPosition);
+                    depths.Add(sample.GenerationDepth);
+                    radii.Add(sample.Radius);
+                    tipWeights.Add(sample.TipWeight);
+                    flexibilities.Add(sample.Flexibility);
+                    stiffnesses.Add(sample.Stiffness);
+                    skinSamples.Add(pathSample);
+                }
+                rings[pathSample] = result;
+                return result;
+            }
+
+            List<int[]> CreateJunctionRings(
+                int[] portRing,
+                int portSample,
+                int junctionSample)
+            {
+                List<int[]> result = new();
+                BranchSample port = plan.Samples[portSample];
+                BranchSample junction = plan.Samples[junctionSample];
+                Vector3 away = port.Position - junction.Position;
+                Vector3 awayDirection = away.sqrMagnitude > 1e-8f
+                    ? away.normalized
+                    : port.Tangent;
+                Vector3 targetTangent = awayDirection;
+                float throatDistance =
+                    Mathf.Max(port.Radius, junction.Radius) *
+                    junctionThroatScale;
+                Vector3 target = junction.Position +
+                    awayDirection * throatDistance;
+                int[] previous = portRing;
+                for (int level = 0; level < junctionRings; level++)
+                {
+                    float linear = (level + 1f) /
+                        (junctionRings + 1f);
+                    float t = linear * linear * (3f - 2f * linear);
+                    Vector3 centre = Vector3.Lerp(
+                        port.Position,
+                        target,
+                        t);
+                    Vector3 ringTangent =
+                        Vector3.Slerp(port.Tangent, targetTangent, t);
+                    Vector3 ringNormal = port.Normal -
+                        ringTangent * Vector3.Dot(port.Normal, ringTangent);
+                    if (ringNormal.sqrMagnitude < 1e-8f)
+                        ringNormal = port.Binormal;
+                    ringNormal.Normalize();
+                    Vector3 ringBinormal =
+                        Vector3.Cross(ringTangent, ringNormal).normalized;
+                    float radius = Mathf.Lerp(
+                        port.Radius,
+                        port.Radius * 0.9f,
+                        t);
+                    int[] ring = new int[radialSegments];
+                    for (int side = 0; side < radialSegments; side++)
+                    {
+                        float angle = side /
+                            (float)radialSegments * Mathf.PI * 2f;
+                        Vector3 radial = (
+                            ringNormal * Mathf.Cos(angle) +
+                            ringBinormal * Mathf.Sin(angle)) * radius;
+                        int vertex = positions.Count;
+                        ring[side] = vertex;
+                        positions.Add(centre + radial);
+                        normals.Add(radial.normalized);
+                        tangents.Add(new Vector4(
+                            ringTangent.x,
+                            ringTangent.y,
+                            ringTangent.z,
+                            1f));
+                        coordinates.Add(new Vector2(
+                            Mathf.Lerp(
+                                port.LocalPosition,
+                                junction.LocalPosition,
+                                t),
+                            side / (float)radialSegments));
+                        branchIds.Add(port.BranchId);
+                        rootDistances.Add(Mathf.Lerp(
+                            port.DistanceFromRoot,
+                            junction.DistanceFromRoot,
+                            t));
+                        tipDistances.Add(Mathf.Lerp(
+                            port.DistanceToTip,
+                            junction.DistanceToTip,
+                            t));
+                        localDistances.Add(Mathf.Lerp(
+                            port.LocalDistance,
+                            junction.LocalDistance,
+                            t));
+                        localPositions.Add(Mathf.Lerp(
+                            port.LocalPosition,
+                            junction.LocalPosition,
+                            t));
+                        depths.Add(port.GenerationDepth);
+                        radii.Add(radius);
+                        tipWeights.Add(port.TipWeight);
+                        flexibilities.Add(port.Flexibility);
+                        stiffnesses.Add(port.Stiffness);
+                        skinSamples.Add(portSample);
+                    }
+                    result.Add(AlignLoop(ring, previous));
+                    previous = result[result.Count - 1];
+                }
+                return result;
+            }
+
+            void ConnectPortRings(
+                int[] port,
+                List<int[]> transitionRings,
+                uint branchId)
+            {
+                int[] previous = port;
+                foreach (int[] ring in transitionRings)
+                {
+                    ConnectFullLoops(
+                        previous, ring, triangles, regions, branchId);
+                    previous = ring;
+                }
+            }
+
+            void AddCap(int[] ring, bool root, uint branchId)
+            {
+                BranchSample sample = plan.Samples[
+                    skinSamples[ring[0]]];
+                int centre = positions.Count;
+                positions.Add(sample.Position);
+                normals.Add(root
+                    ? -sample.Tangent
+                    : sample.Tangent);
+                tangents.Add(new Vector4(
+                    sample.Tangent.x,
+                    sample.Tangent.y,
+                    sample.Tangent.z,
+                    1f));
+                coordinates.Add(new Vector2(
+                    sample.LocalPosition, 0.5f));
+                branchIds.Add(sample.BranchId);
+                rootDistances.Add(sample.DistanceFromRoot);
+                tipDistances.Add(sample.DistanceToTip);
+                localDistances.Add(sample.LocalDistance);
+                localPositions.Add(sample.LocalPosition);
+                depths.Add(sample.GenerationDepth);
+                radii.Add(sample.Radius);
+                tipWeights.Add(sample.TipWeight);
+                flexibilities.Add(sample.Flexibility);
+                stiffnesses.Add(sample.Stiffness);
+                skinSamples.Add(skinSamples[ring[0]]);
+                for (int i = 0; i < ring.Length; i++)
+                {
+                    int next = (i + 1) % ring.Length;
+                    AddTriangle(
+                        triangles,
+                        regions,
+                        centre,
+                        root ? ring[next] : ring[i],
+                        root ? ring[i] : ring[next],
+                        branchId);
+                }
+            }
+
+            int[] AlignLoop(int[] loop, int[] reference)
+            {
+                int count = loop.Length;
+                float best = float.MaxValue;
+                bool reverse = false;
+                int offset = 0;
+                for (int direction = 0; direction < 2; direction++)
+                for (int shift = 0; shift < count; shift++)
+                {
+                    float error = 0f;
+                    for (int i = 0; i < count; i++)
+                    {
+                        int mapped = direction == 0
+                            ? (i + shift) % count
+                            : (shift - i + count) % count;
+                        error += (
+                            positions[loop[mapped]] -
+                            positions[reference[i]]).sqrMagnitude;
+                    }
+                    if (error >= best)
+                        continue;
+                    best = error;
+                    reverse = direction != 0;
+                    offset = shift;
+                }
+                int[] result = new int[count];
+                for (int i = 0; i < count; i++)
+                {
+                    int mapped = reverse
+                        ? (offset - i + count) % count
+                        : (i + offset) % count;
+                    result[i] = loop[mapped];
+                }
+                return result;
+            }
+
+            void ConnectYJunction(
+                int[] parent,
+                int[] first,
+                int[] second,
+                List<Vector3Int> targetTriangles,
+                List<uint> targetRegions,
+                uint branchId)
+            {
+                int count = parent.Length;
+                int half = count / 2;
+                int[] p = (int[])parent.Clone();
+                int[] a = AlignLoop(first, p);
+                int[] b = AlignLoop(second, p);
+                ConnectArc(p, 0, a, 0);
+                ConnectArc(p, half, b, half);
+                ConnectRemainingHalves(a, b);
+
+                void ConnectArc(
+                    int[] source,
+                    int sourceStart,
+                    int[] target,
+                    int targetStart)
+                {
+                    for (int i = 0; i < half; i++)
+                    {
+                        int s0 = source[(sourceStart + i) % count];
+                        int s1 = source[(sourceStart + i + 1) % count];
+                        int t0 = target[(targetStart + i) % count];
+                        int t1 = target[(targetStart + i + 1) % count];
+                        AddTriangle(
+                            triangles, regions, s0, t0, t1, branchId);
+                        AddTriangle(
+                            triangles, regions, s0, t1, s1, branchId);
+                    }
+                }
+
+                void ConnectRemainingHalves(int[] left, int[] right)
+                {
+                    for (int i = 0; i < half; i++)
+                    {
+                        int l0 = left[(half + i) % count];
+                        int l1 = left[(half + i + 1) % count];
+                        int r0 = right[
+                            (half - i + count) % count];
+                        int r1 = right[
+                            (half - i - 1 + count) % count];
+                        AddTriangle(
+                            triangles, regions, l0, r0, r1, branchId);
+                        AddTriangle(
+                            triangles, regions, l0, r1, l1, branchId);
+                    }
+                    AddTriangle(
+                        triangles, regions, p[0], a[0], b[0], branchId);
+                    AddTriangle(
+                        triangles, regions, p[half], a[half], b[half], branchId);
+                }
+            }
+
+            void ConnectFullLoops(
+                int[] left,
+                int[] right,
+                List<Vector3Int> targetTriangles,
+                List<uint> targetRegions,
+                uint branchId)
+            {
+                for (int i = 0; i < left.Length; i++)
+                {
+                    int next = (i + 1) % left.Length;
+                    AddTriangle(
+                        targetTriangles,
+                        targetRegions,
+                        left[i],
+                        right[i],
+                        right[next],
+                        branchId);
+                    AddTriangle(
+                        targetTriangles,
+                        targetRegions,
+                        left[i],
+                        right[next],
+                        left[next],
+                        branchId);
+                }
+            }
+
+        }
+
+        private static void BuildDirectSkinBindings(
+            List<int> samples,
+            BranchGraphPlan plan,
+            List<Vector3> positions,
+            List<uint> indices,
+            List<float> weights,
+            List<Vector3> offsets)
+        {
+            for (int vertex = 0; vertex < positions.Count; vertex++)
+            {
+                int sampleIndex = samples[vertex];
+                BranchSample sample = plan.Samples[sampleIndex];
+                Vector3 local = positions[vertex] - sample.Position;
+                Vector3 offset = new(
+                    Vector3.Dot(local, sample.Tangent),
+                    Vector3.Dot(local, sample.Normal),
+                    Vector3.Dot(local, sample.Binormal));
+                for (int influence = 0; influence < 4; influence++)
+                {
+                    indices.Add((uint)sampleIndex);
+                    weights.Add(influence == 0 ? 1f : 0f);
+                    offsets.Add(influence == 0 ? offset : Vector3.zero);
+                }
+            }
+        }
+
+        private static void SubdividePortJunction(
+                    BranchGraphPlan plan,
+                    List<Vector3> positions,
+                    List<Vector3> normals,
+                    List<Vector4> tangents,
+                    List<Vector2> coordinates,
+                    List<uint> branchIds,
+                    List<float> rootDistances,
+                    List<float> tipDistances,
+                    List<float> localDistances,
+                    List<float> localPositions,
+                    List<uint> depths,
+                    List<float> radii,
+                    List<float> tipWeights,
+                    List<float> flexibilities,
+                    List<float> stiffnesses,
+                    List<int> skinSamples,
+                    List<Vector3Int> triangles,
+                    List<uint> regions)
+                {
+                    int originalVertexCount = positions.Count;
+                    int originalTriangleCount = triangles.Count;
+                    Dictionary<long, List<int>> edgeFaces = new();
+                    Dictionary<long, int> edgeMidpoints = new();
+                    HashSet<int>[] neighbours = new HashSet<int>[originalVertexCount];
+                    for (int i = 0; i < neighbours.Length; i++)
+                        neighbours[i] = new HashSet<int>();
+                    for (int face = 0; face < originalTriangleCount; face++)
+                    {
+                        Vector3Int triangle = triangles[face];
+                        Register(triangle.x, triangle.y, face);
+                        Register(triangle.y, triangle.z, face);
+                        Register(triangle.z, triangle.x, face);
+                    }
+
+                    Vector3[] smoothPositions = positions.GetRange(
+                        0, originalVertexCount).ToArray();
+                    Vector3[] normalVectors = normals.GetRange(
+                        0, originalVertexCount).ToArray();
+                    for (int vertex = 0; vertex < originalVertexCount; vertex++)
+                    {
+                        HashSet<int> adjacent = neighbours[vertex];
+                        float beta = adjacent.Count == 3
+                            ? 3f / 16f
+                            : 3f / (8f * adjacent.Count);
+                        Vector3 average = Vector3.zero;
+                        foreach (int neighbour in adjacent)
+                            average += positions[neighbour];
+                        smoothPositions[vertex] =
+                            positions[vertex] * (1f - beta * adjacent.Count) +
+                            average * beta;
+                        if (adjacent.Count == 0)
+                            smoothPositions[vertex] = positions[vertex];
+                    }
+                    for (int vertex = 0; vertex < originalVertexCount; vertex++)
+                    {
+                        positions[vertex] = smoothPositions[vertex];
+                        normals[vertex] = normalVectors[vertex];
+                    }
+
+                    foreach (KeyValuePair<long, List<int>> edge in edgeFaces)
+                    {
+                        DecodeEdge(edge.Key, out int a, out int b);
+                        Vector3 midpoint;
+                        if (edge.Value.Count == 2)
+                        {
+                            Vector3Int first = triangles[edge.Value[0]];
+                            Vector3Int second = triangles[edge.Value[1]];
+                            int c = Opposite(first, a, b);
+                            int d = Opposite(second, a, b);
+                            midpoint =
+                                (positions[a] + positions[b]) * 3f / 8f +
+                                (positions[c] + positions[d]) * 1f / 8f;
+                        }
+                        else
+                        {
+                            midpoint = (positions[a] + positions[b]) * 0.5f;
+                        }
+                        int vertex = positions.Count;
+                        edgeMidpoints.Add(edge.Key, vertex);
+                        positions.Add(midpoint);
+                        BranchSample sample = NearestSample(plan, midpoint);
+                        int pathSample = IndexOfNearestSample(plan, midpoint);
+                        Vector3 restNormal = (
+                            normals[a] + normals[b]).normalized;
+                        normals.Add(restNormal);
+                        tangents.Add(((Vector3)(
+                            (Vector4)tangents[a] +
+                            (Vector4)tangents[b])).normalized);
+                        coordinates.Add(
+                            (coordinates[a] + coordinates[b]) * 0.5f);
+                        branchIds.Add(sample.BranchId);
+                        rootDistances.Add(sample.DistanceFromRoot);
+                        tipDistances.Add(sample.DistanceToTip);
+                        localDistances.Add(sample.LocalDistance);
+                        localPositions.Add(sample.LocalPosition);
+                        depths.Add(sample.GenerationDepth);
+                        radii.Add(sample.Radius);
+                        tipWeights.Add(sample.TipWeight);
+                        flexibilities.Add(sample.Flexibility);
+                        stiffnesses.Add(sample.Stiffness);
+                        skinSamples.Add(pathSample);
+                    }
+
+                    List<Vector3Int> refinedTriangles = new(
+                        originalTriangleCount * 4);
+                    List<uint> refinedRegions = new(
+                        originalTriangleCount * 4);
+                    for (int face = 0; face < originalTriangleCount; face++)
+                    {
+                        Vector3Int triangle = triangles[face];
+                        int ab = edgeMidpoints[EdgeKey(
+                            triangle.x, triangle.y)];
+                        int bc = edgeMidpoints[EdgeKey(
+                            triangle.y, triangle.z)];
+                        int ca = edgeMidpoints[EdgeKey(
+                            triangle.z, triangle.x)];
+                        AddTriangle(
+                            refinedTriangles,
+                            refinedRegions,
+                            triangle.x, ab, ca,
+                            regions[face]);
+                        AddTriangle(
+                            refinedTriangles,
+                            refinedRegions,
+                            ab, triangle.y, bc,
+                            regions[face]);
+                        AddTriangle(
+                            refinedTriangles,
+                            refinedRegions,
+                            ca, bc, triangle.z,
+                            regions[face]);
+                        AddTriangle(
+                            refinedTriangles,
+                            refinedRegions,
+                            ab, bc, ca,
+                            regions[face]);
+                    }
+                    triangles.Clear();
+                    triangles.AddRange(refinedTriangles);
+                    regions.Clear();
+                    regions.AddRange(refinedRegions);
+
+                    void Register(int a, int b, int face)
+                    {
+                        neighbours[a].Add(b);
+                        neighbours[b].Add(a);
+                        long key = EdgeKey(a, b);
+                        if (!edgeFaces.TryGetValue(key, out List<int> faces))
+                        {
+                            faces = new List<int>(2);
+                            edgeFaces.Add(key, faces);
+                        }
+                        faces.Add(face);
+                    }
+                }
+
+                private static void RelaxJunctionPositions(
+                    List<Vector3> positions,
+                    List<Vector3Int> triangles,
+                    int iterations)
+                {
+                    List<HashSet<int>> neighbours = new(positions.Count);
+                    for (int i = 0; i < positions.Count; i++)
+                        neighbours.Add(new HashSet<int>());
+                    foreach (Vector3Int triangle in triangles)
+                    {
+                        neighbours[triangle.x].Add(triangle.y);
+                        neighbours[triangle.x].Add(triangle.z);
+                        neighbours[triangle.y].Add(triangle.x);
+                        neighbours[triangle.y].Add(triangle.z);
+                        neighbours[triangle.z].Add(triangle.x);
+                        neighbours[triangle.z].Add(triangle.y);
+                    }
+                    for (int iteration = 0; iteration < iterations; iteration++)
+                    {
+                        Vector3[] next = positions.ToArray();
+                        for (int vertex = 0; vertex < positions.Count; vertex++)
+                        {
+                            if (neighbours[vertex].Count == 0)
+                                continue;
+                            Vector3 average = Vector3.zero;
+                            foreach (int neighbour in neighbours[vertex])
+                                average += positions[neighbour];
+                            average /= neighbours[vertex].Count;
+                            next[vertex] = Vector3.Lerp(
+                                positions[vertex], average, 0.16f);
+                        }
+                        positions.Clear();
+                        positions.AddRange(next);
+                    }
+                }
+
+                private static long EdgeKey(int a, int b) =>
+                    ((long)Mathf.Min(a, b) << 32) | (uint)Mathf.Max(a, b);
+
+                private static void DecodeEdge(
+                    long key,
+                    out int a,
+                    out int b)
+                {
+                    a = (int)(key >> 32);
+                    b = (int)(key & 0xFFFFFFFF);
+                }
+
+                private static int Opposite(
+                    Vector3Int triangle,
+                    int a,
+                    int b)
+                {
+                    if (triangle.x != a && triangle.x != b)
+                        return triangle.x;
+                    if (triangle.y != a && triangle.y != b)
+                        return triangle.y;
+                    return triangle.z;
+                }
+
+                private static int IndexOfNearestSample(
+                    BranchGraphPlan plan,
+                    Vector3 position)
+                {
+                    int result = 0;
+                    float best = float.MaxValue;
+                    for (int i = 0; i < plan.SampleCount; i++)
+                    {
+                        float distance =
+                            (plan.Samples[i].Position - position).sqrMagnitude;
+                        if (distance >= best)
+                            continue;
+                        best = distance;
+                        result = i;
+                    }
+                    return result;
+                }
+
+        private static void AddTriangle(
+            List<Vector3Int> triangles,
+            List<uint> regions,
+            int a,
+            int b,
+            int c,
+            uint region)
+        {
+            triangles.Add(new Vector3Int(a, b, c));
+            regions.Add(region);
         }
 
         private static int GridIndex(

@@ -12,7 +12,7 @@ GPU procedural-geometry framework described in
 | Runtime source of truth | Immutable branch graph plus GPU rest/live branch-path state |
 | First deformation primitives | Tip-weighted turbulence and spatial attraction |
 | Phase gate | Root and thick lower branches move less than thin terminal tips; child branches remain attached at every junction |
-| Rendering slice | Line/glyph graph plus one closed, unified branch mesh |
+| Rendering slice | Line/glyph graph plus selectable `ImplicitUnion` and `PortJunction` closed meshes |
 | UI | Simple functional UI Toolkit component inspectors |
 | Testing | deterministic plans, GPU invariants, deformation tests, lifecycle and PlayMode rendering |
 
@@ -31,6 +31,8 @@ The Phase 6 branching vertical slice is implemented in `ReactiveGeometry/`:
   transform/local-target `BranchAttractorDeformer`;
 - a unified closed branch mesh with line/glyph and one-shot live graph
   overlays;
+- `PortJunction`, a regular tube-strip variant for one- and two-child trees;
+- `ImplicitUnion`, retained as the smooth volumetric fallback;
 - a functional `Phase6/01_BranchGraphs` scene and UI Toolkit component
   inspectors;
 - EditMode topology, attachment, deformation and lifecycle tests plus a
@@ -42,6 +44,27 @@ and one-to-four-way junctions without duplicate branch tubes. Mesh vertices use
 four-sample graph-frame skin bindings, so junction continuity survives live
 deformation. Dynamic path forces, particle networks, arbitrary cyclic graphs and
 Voronoi remain outside the branching phase gate.
+
+`PortJunction` is the preferred variant for clean branch silhouettes. Ordinary
+branch samples become regular rings connected by quads split into triangles.
+One-child nodes use a ring bridge; two-child nodes use a fixed three-port
+junction patch, with root and terminal caps. One to four configurable transition
+rings shorten the port-to-junction span and prevent broad fan triangles from
+crossing the fork. Zero to two Loop-subdivision passes can then smooth the
+junction and adjacent port rings while preserving the closed manifold. The
+current `PortJunction` preset disables subdivision by default because Loop
+subdivision on the nonuniform three-port boundary can open handoff edges;
+constrained position relaxation provides the supported smoothing path. Each
+transition chain stops at a distinct throat ring placed along its outgoing arm;
+the default offset is `2.1 * local radius`, preventing adjacent port tubes from
+intersecting at typical fork angles. The chains do not converge to the same
+geometric centre. Side-view validation shows that this hand-authored
+three-port template can still form a cap-like crotch surface. The next mesh
+milestone is a hybrid junction patch: preserve regular tube strips, extract
+only the local one-to-two junction region from a smooth implicit union, and
+weld its clipped boundary back to the port rings. It deliberately rejects
+nodes with more than two children rather than silently producing irregular
+topology.
 
 ## 1. Purpose
 
@@ -458,7 +481,8 @@ Required inspector functionality:
 Recommended scenes:
 
 ```text
-Phase6/01_BranchGraphs
+Phase6/01_BranchGraphs       (`ImplicitUnion`)
+Phase6/02_PortJunction      (`PortJunction`, one/two children)
 ```
 
 ## 11. Proposed package layout

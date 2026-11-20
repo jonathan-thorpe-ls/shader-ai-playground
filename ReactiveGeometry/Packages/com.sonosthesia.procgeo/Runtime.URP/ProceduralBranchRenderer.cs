@@ -38,6 +38,7 @@ namespace Sonosthesia.ProcGeo
         public int PathSampleCount => _generator?.GraphPlan.SampleCount ?? 0;
         public int VertexCount => _generator?.VertexCount ?? 0;
         public bool IsGenerated => _resource != null && _resource.Version > 0;
+        public BranchMeshVariant MeshVariant => settings.meshVariant;
 
         public void SetSettings(BranchGenerationSettings value)
         {
@@ -63,6 +64,11 @@ namespace Sonosthesia.ProcGeo
                     new TreeBranchGenerator().Plan(settings);
                 _generator = new BranchGeometryGenerator(
                     plan,
+                    settings.meshVariant,
+                    settings.radialSegments,
+                    settings.junctionRings,
+                    settings.junctionSubdivisions,
+                    settings.junctionThroatScale,
                     settings.meshCellSize,
                     settings.meshSmoothingRadius);
                 _resource = new GeometryResource(_generator.Plan());

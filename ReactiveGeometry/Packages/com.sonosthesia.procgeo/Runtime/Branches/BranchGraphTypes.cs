@@ -3,9 +3,16 @@ using UnityEngine;
 
 namespace Sonosthesia.ProcGeo
 {
+    public enum BranchMeshVariant
+    {
+        ImplicitUnion,
+        PortJunction
+    }
+
     [Serializable]
     public struct BranchGenerationSettings
     {
+        public BranchMeshVariant meshVariant;
         [Min(0)] public int maximumDepth;
         [Min(1)] public int branchesPerNode;
         [Min(0.01f)] public float initialLength;
@@ -20,6 +27,10 @@ namespace Sonosthesia.ProcGeo
         [Min(1)] public int minimumSamples;
         [Min(1)] public int samplesPerUnitLength;
         [Min(1)] public int maximumSamplesPerBranch;
+        [Min(3)] public int radialSegments;
+        [Range(1, 4)] public int junctionRings;
+        [Range(0, 2)] public int junctionSubdivisions;
+        [Range(0.5f, 3f)] public float junctionThroatScale;
         [Min(0.01f)] public float meshCellSize;
         [Min(0f)] public float meshSmoothingRadius;
         [Min(1)] public int maximumBranches;
@@ -32,6 +43,7 @@ namespace Sonosthesia.ProcGeo
 
         public static BranchGenerationSettings Default => new()
         {
+            meshVariant = BranchMeshVariant.PortJunction,
             maximumDepth = 3,
             branchesPerNode = 2,
             initialLength = 2.2f,
@@ -46,6 +58,10 @@ namespace Sonosthesia.ProcGeo
             minimumSamples = 3,
             samplesPerUnitLength = 5,
             maximumSamplesPerBranch = 24,
+            radialSegments = 12,
+            junctionRings = 2,
+            junctionSubdivisions = 0,
+            junctionThroatScale = 2.1f,
             meshCellSize = 0.08f,
             meshSmoothingRadius = 0.12f,
             maximumBranches = 128,

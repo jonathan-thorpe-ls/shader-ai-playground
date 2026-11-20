@@ -430,6 +430,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Sonosthesia.ProcGeo.Runtime.URP::Sonosthesia.ProcGeo.ProceduralBranchRenderer
   settings:
+    meshVariant: 0
     maximumDepth: 2
     branchesPerNode: 4
     initialLength: 2.2
@@ -444,6 +445,8 @@ MonoBehaviour:
     minimumSamples: 3
     samplesPerUnitLength: 5
     maximumSamplesPerBranch: 24
+    radialSegments: 12
+    junctionRings: 2
     meshCellSize: 0.07
     meshSmoothingRadius: 0.12
     maximumBranches: 64

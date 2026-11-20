@@ -157,6 +157,7 @@ namespace Sonosthesia.ProcGeo.Tests
                 SystemInfo.supportsComputeShaders,
                 "A graphics compute device is required.");
             BranchGenerationSettings settings = SmallSettings();
+            settings.meshVariant = BranchMeshVariant.ImplicitUnion;
             settings.branchesPerNode = 4;
             settings.maximumBranches = 64;
             settings.maximumPathSamples = 256;
@@ -169,9 +170,14 @@ namespace Sonosthesia.ProcGeo.Tests
             Assert.That(errors, Is.Empty, string.Join(Environment.NewLine, errors));
             uint[] faceCounts = Read<uint>(
                 context.Resource.Topology.EdgeFaceCounts);
+            int invalidFaceCount = Array.FindIndex(
+                faceCounts, count => count != 2u);
             Assert.That(
                 Array.TrueForAll(faceCounts, count => count == 2u),
-                Is.True);
+                Is.True,
+                invalidFaceCount >= 0
+                    ? $"Edge {invalidFaceCount} has {faceCounts[invalidFaceCount]} triangles."
+                    : string.Empty);
             float[] boundary = Read<float>(
                 context.Resource.Attributes
                     .Require(AttributeIds.BoundaryWeight).Buffer);
@@ -199,6 +205,90 @@ namespace Sonosthesia.ProcGeo.Tests
                 else
                 {
                     directions.Add(key, direction);
+                }
+            }
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        public void PortJunctionMeshIsClosedAndRegular(int childCount)
+        {
+            Assume.That(
+                SystemInfo.supportsComputeShaders,
+                "A graphics compute device is required.");
+            BranchGenerationSettings settings = SmallSettings();
+            settings.meshVariant = BranchMeshVariant.PortJunction;
+            settings.branchesPerNode = childCount;
+            settings.radialSegments = 8;
+            settings.junctionSubdivisions = 0;
+            settings.maximumBranches = 32;
+            settings.maximumPathSamples = 128;
+            using BranchTestContext context =
+                BranchTestContext.Build(settings);
+
+            Assert.That(
+                context.Generator.VertexCount,
+                Is.LessThan(
+                    6 *
+                    (context.Generator.GraphPlan.SampleCount *
+                    settings.radialSegments +
+                    context.Generator.GraphPlan.BranchCount *
+                    settings.junctionRings *
+                    settings.radialSegments)));
+            uint[] degrees = Read<uint>(
+                context.Resource.Attributes
+                    .Require(AttributeIds.NeighbourCount).Buffer);
+            Assert.That(
+                Array.FindAll(degrees, degree => degree > 8).Length,
+                Is.LessThanOrEqualTo(1),
+                "Only the fork transition seam may exceed regular tube valence.");
+            uint[] faceCounts = Read<uint>(
+                context.Resource.Topology.EdgeFaceCounts);
+            int invalidEdge = Array.FindIndex(
+                faceCounts, count => count != 2u);
+            Vector2Int invalidEndpoints = invalidEdge >= 0
+                ? Read<Vector2Int>(
+                    context.Resource.Topology.Edges)[invalidEdge]
+                : new Vector2Int(-1, -1);
+            Assert.That(
+                Array.TrueForAll(faceCounts, count => count == 2u),
+                Is.True,
+                invalidEdge >= 0
+                    ? $"Edge {invalidEdge} {invalidEndpoints} has {faceCounts[invalidEdge]} faces."
+                    : string.Empty);
+            float[] boundary = Read<float>(
+                context.Resource.Attributes
+                    .Require(AttributeIds.BoundaryWeight).Buffer);
+            Assert.That(Array.TrueForAll(
+                boundary, value => Mathf.Abs(value) < 1e-6f), Is.True);
+            IReadOnlyList<string> errors =
+                TopologyValidator.Validate(context.Resource);
+            Assert.That(errors, Is.Empty, string.Join(Environment.NewLine, errors));
+
+            BranchGraphPlan plan = context.Generator.GraphPlan;
+            int rings = settings.radialSegments;
+            foreach (BranchRecord branch in plan.Branches)
+            {
+                if (branch.Terminal)
+                    continue;
+                int pathSample =
+                    (int)(branch.SampleOffset + branch.SampleCount - 2);
+                int firstVertex = pathSample * rings;
+                int lastVertex = firstVertex + rings - 1;
+                foreach (Vector3Int triangle in
+                    context.Generator.DebugTriangles)
+                {
+                    bool allOnPort =
+                        triangle.x >= firstVertex &&
+                        triangle.x <= lastVertex &&
+                        triangle.y >= firstVertex &&
+                        triangle.y <= lastVertex &&
+                        triangle.z >= firstVertex &&
+                        triangle.z <= lastVertex;
+                    Assert.That(
+                        allOnPort,
+                        Is.False,
+                        $"Nonterminal branch {branch.Id} is capped.");
                 }
             }
         }
@@ -470,6 +560,11 @@ namespace Sonosthesia.ProcGeo.Tests
                     new TreeBranchGenerator().Plan(settings);
                 result.Generator = new BranchGeometryGenerator(
                     plan,
+                    settings.meshVariant,
+                    settings.radialSegments,
+                    settings.junctionRings,
+                    settings.junctionSubdivisions,
+                    settings.junctionThroatScale,
                     settings.meshCellSize,
                     settings.meshSmoothingRadius);
                 result.Resource = new GeometryResource(result.Generator.Plan());
