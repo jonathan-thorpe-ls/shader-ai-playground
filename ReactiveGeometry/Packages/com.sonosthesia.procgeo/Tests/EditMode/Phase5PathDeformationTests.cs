@@ -108,6 +108,73 @@ namespace Sonosthesia.ProcGeo.Tests
         }
 
         [Test]
+        public void ClosedPathWaveHasContinuousSeamAdjacentToFirstSample()
+        {
+            Assume.That(SystemInfo.supportsComputeShaders, "A graphics compute device is required.");
+            using PathTestContext context = PathTestContext.Build();
+            context.Pipeline.Record(
+                new IPathDeformer[]
+                {
+                    new TestPathWave(Vector3.up, 0.1f, 2f, 0f)
+                },
+                Array.Empty<IVertexDeformer>(),
+                0f,
+                0f);
+
+            Vector3[] rest = context.Generator.CreatePathGeometryData().Positions;
+            Vector3[] live = Read<Vector3>(context.Pipeline.Path.LivePositions);
+            float leftSeam = Vector3.Distance(
+                live[live.Length - 1] - rest[rest.Length - 1],
+                live[0] - rest[0]);
+            float typicalStep = Vector3.Distance(
+                live[0] - rest[0],
+                live[1] - rest[1]);
+            Assert.That(
+                leftSeam,
+                Is.LessThanOrEqualTo(typicalStep * 1.25f),
+                "The closing contribution must be no less continuous than an interior step.");
+        }
+
+        [Test]
+        public void ClosedPathNoiseIsFiniteDeterministicAndSeamless()
+        {
+            Assume.That(SystemInfo.supportsComputeShaders, "A graphics compute device is required.");
+            using PathTestContext context = PathTestContext.Build();
+            TestPathNoise noise = new(3f, 0.2f);
+            context.Pipeline.Record(
+                new IPathDeformer[] { noise },
+                Array.Empty<IVertexDeformer>(),
+                0f,
+                1f);
+            Vector3[] first = Read<Vector3>(
+                context.Pipeline.Buffers.PathContributions);
+            Vector3[] rest = context.Generator.CreatePathGeometryData().Positions;
+
+            Assert.That(Array.TrueForAll(first, IsFinite), Is.True);
+            context.Pipeline.Record(
+                new IPathDeformer[] { noise },
+                Array.Empty<IVertexDeformer>(),
+                0f,
+                1f);
+            Vector3[] second = Read<Vector3>(
+                context.Pipeline.Buffers.PathContributions);
+            for (int i = 0; i < first.Length; i++)
+                Assert.That(Vector3.Distance(first[i], second[i]),
+                    Is.LessThan(0.0001f));
+
+            float seam = Vector3.Distance(first[^1], first[0]);
+            float[] interiorSteps = new float[first.Length - 1];
+            for (int i = 0; i < interiorSteps.Length; i++)
+                interiorSteps[i] = Vector3.Distance(first[i], first[i + 1]);
+            Array.Sort(interiorSteps);
+            float medianStep = interiorSteps[interiorSteps.Length / 2];
+            Assert.That(
+                seam,
+                Is.LessThanOrEqualTo(medianStep * 3f + 0.002f),
+                "Value noise must wrap continuously around the closed path.");
+        }
+
+        [Test]
         public void DynamicPathModeRemainsFiniteAndReturnsBaseRingRadius()
         {
             Assume.That(SystemInfo.supportsComputeShaders, "A graphics compute device is required.");
@@ -248,6 +315,55 @@ namespace Sonosthesia.ProcGeo.Tests
             }
         }
 
+        private sealed class TestPathWave : IPathDeformer
+        {
+            private readonly Vector3 _direction;
+            private readonly float _amplitude;
+            private readonly float _frequency;
+            private readonly float _phase;
+
+            public TestPathWave(
+                Vector3 direction,
+                float amplitude,
+                float frequency,
+                float phase)
+            {
+                _direction = direction;
+                _amplitude = amplitude;
+                _frequency = frequency;
+                _phase = phase;
+            }
+
+            public bool Enabled => true;
+
+            public void Record(CommandBuffer command, PathDeformerContext context)
+            {
+                int kernel = context.Shader.FindKernel("AddPathWave");
+                command.SetComputeVectorParam(
+                    context.Shader, "_WaveDirection", _direction);
+                command.SetComputeFloatParam(
+                    context.Shader, "_WaveAmplitude", _amplitude);
+                command.SetComputeFloatParam(
+                    context.Shader, "_WaveFrequency", _frequency);
+                command.SetComputeFloatParam(
+                    context.Shader, "_WaveSpeed", 0f);
+                command.SetComputeFloatParam(
+                    context.Shader, "_WavePhase", _phase);
+                command.SetComputeFloatParam(context.Shader, "_Time", 0f);
+                command.SetComputeBufferParam(
+                    context.Shader, kernel, "_RestPathDistances",
+                    context.Path.RestDistances);
+                command.SetComputeBufferParam(
+                    context.Shader, kernel, "_RestPathPositions",
+                    context.Path.RestPositions);
+                command.SetComputeBufferParam(
+                    context.Shader, kernel, "_PathContributions",
+                    context.Buffers.PathContributions);
+                command.DispatchCompute(
+                    context.Shader, kernel, context.ThreadGroups, 1, 1);
+            }
+        }
+
         private sealed class TestVertexNormalOffset : IVertexDeformer
         {
             private readonly float _amplitude;
@@ -280,6 +396,66 @@ namespace Sonosthesia.ProcGeo.Tests
                 command.SetComputeBufferParam(
                     context.Shader, kernel, "_VertexOffsets",
                     context.Buffers.VertexOffsets);
+                command.DispatchCompute(
+                    context.Shader, kernel, context.ThreadGroups, 1, 1);
+            }
+        }
+
+        private sealed class TestPathNoise : IPathDeformer
+        {
+            private readonly float _frequency;
+            private readonly float _amplitude;
+
+            public TestPathNoise(float frequency, float amplitude)
+            {
+                _frequency = frequency;
+                _amplitude = amplitude;
+            }
+
+            public bool Enabled => true;
+
+            public void Record(CommandBuffer command, PathDeformerContext context)
+            {
+                int kernel = context.Shader.FindKernel("AddPathNoise");
+                command.SetComputeIntParam(
+                    context.Shader, "_PathNoiseSeed", 37);
+                command.SetComputeIntParam(
+                    context.Shader, "_PathNoiseOctaves", 3);
+                command.SetComputeFloatParam(
+                    context.Shader, "_PathNoiseFrequency", _frequency);
+                command.SetComputeFloatParam(
+                    context.Shader, "_PathNoiseSpeed", 0.5f);
+                command.SetComputeFloatParam(
+                    context.Shader, "_PathNoisePhase", 0.2f);
+                command.SetComputeFloatParam(
+                    context.Shader, "_PathNoiseLacunarity", 2f);
+                command.SetComputeFloatParam(
+                    context.Shader, "_PathNoiseGain", 0.5f);
+                command.SetComputeFloatParam(
+                    context.Shader, "_PathNoiseAmplitude", _amplitude);
+                command.SetComputeVectorParam(
+                    context.Shader, "_PathNoiseBasis",
+                    new Vector3(0f, 1f, 0.35f));
+                command.SetComputeFloatParam(
+                    context.Shader, "_Time", context.Time);
+                command.SetComputeBufferParam(
+                    context.Shader, kernel, "_RestPathDistances",
+                    context.Path.RestDistances);
+                command.SetComputeBufferParam(
+                    context.Shader, kernel, "_RestPathPositions",
+                    context.Path.RestPositions);
+                command.SetComputeBufferParam(
+                    context.Shader, kernel, "_RestPathTangents",
+                    context.Path.RestTangents);
+                command.SetComputeBufferParam(
+                    context.Shader, kernel, "_RestPathNormals",
+                    context.Path.RestNormals);
+                command.SetComputeBufferParam(
+                    context.Shader, kernel, "_RestPathBinormals",
+                    context.Path.RestBinormals);
+                command.SetComputeBufferParam(
+                    context.Shader, kernel, "_PathContributions",
+                    context.Buffers.PathContributions);
                 command.DispatchCompute(
                     context.Shader, kernel, context.ThreadGroups, 1, 1);
             }

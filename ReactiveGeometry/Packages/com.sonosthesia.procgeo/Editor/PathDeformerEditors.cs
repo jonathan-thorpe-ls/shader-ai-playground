@@ -55,6 +55,18 @@ namespace Sonosthesia.ProcGeo.Editor
             };
     }
 
+    [CustomEditor(typeof(PathNoiseDeformer))]
+    public sealed class PathNoiseDeformerEditor : PathDeformerEditorBase
+    {
+        protected override string[] Properties =>
+            new[]
+            {
+                "deformationEnabled", "amplitude",
+                "spatialFrequency", "temporalSpeed", "phase", "seed",
+                "octaves", "lacunarity", "gain", "localBasis"
+            };
+    }
+
     [CustomEditor(typeof(VertexNormalOffsetDeformer))]
     public sealed class VertexNormalOffsetDeformerEditor : PathDeformerEditorBase
     {

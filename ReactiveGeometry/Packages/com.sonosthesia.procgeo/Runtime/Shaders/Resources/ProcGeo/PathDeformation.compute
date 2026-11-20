@@ -4,6 +4,7 @@
 #pragma kernel AddPathWave
 #pragma kernel AddPathTwist
 #pragma kernel AddDynamicPathWave
+#pragma kernel AddPathNoise
 #pragma kernel BuildPathFrames
 #pragma kernel SkinPathGeometry
 #pragma kernel ClearVertexOffsets
@@ -44,6 +45,7 @@ RWByteAddressBuffer _StaticVertices;
 
 uint _PathSampleCount;
 uint _PathClosed;
+float _PathRestLength;
 uint _VertexCount;
 float _Epsilon;
 float3 _PathOffset;
@@ -77,6 +79,15 @@ float _OuterRadius;
 float _SourceWeight;
 int _FalloffMode;
 int _SourceEnabled;
+int _PathNoiseSeed;
+int _PathNoiseOctaves;
+float _PathNoiseFrequency;
+float _PathNoiseSpeed;
+float _PathNoisePhase;
+float _PathNoiseLacunarity;
+float _PathNoiseGain;
+float _PathNoiseAmplitude;
+float3 _PathNoiseBasis;
 
 static const uint DYNAMIC_VERTEX_STRIDE = 24;
 static const uint STATIC_VERTEX_STRIDE = 24;
@@ -95,6 +106,60 @@ float SmoothMask(float t, float start, float end)
     if (end <= start + 0.0001)
         return 1.0;
     return 1.0 - smoothstep(start, end, t);
+}
+
+float WavePhaseAt(uint sample)
+{
+    float arcDistance = _RestPathDistances[sample];
+    float spatialPhase = _PathClosed != 0
+        ? arcDistance / max(_PathRestLength, _Epsilon) *
+            _WaveFrequency * 6.28318530718
+        : arcDistance * _WaveFrequency;
+    return _WavePhase + _Time * _WaveSpeed - spatialPhase;
+}
+
+float2 Hash22(float2 value)
+{
+    float3 p = float3(value,
+        dot(value, float2(127.1, 311.7)) + float(_PathNoiseSeed));
+    p = frac(p * 0.1031);
+    p += dot(p, p.yzx + 33.33);
+    return frac((p.xx + p.yz) * p.zy);
+}
+
+float ValueNoise(float2 value)
+{
+    float2 cell = floor(value);
+    float2 local = frac(value);
+    float2 weight = local * local * (3.0 - 2.0 * local);
+    float a = dot(Hash22(cell), float2(0.754877666, 0.569840296));
+    float b = dot(Hash22(cell + float2(1.0, 0.0)),
+        float2(0.754877666, 0.569840296));
+    float c = dot(Hash22(cell + float2(0.0, 1.0)),
+        float2(0.754877666, 0.569840296));
+    float d = dot(Hash22(cell + float2(1.0, 1.0)),
+        float2(0.754877666, 0.569840296));
+    return lerp(lerp(a, b, weight.x), lerp(c, d, weight.x), weight.y);
+}
+
+float PathNoiseSample(float2 coordinate)
+{
+    float sum = 0.0;
+    float normalizer = 0.0;
+    float amplitude = 1.0;
+    float frequency = 1.0;
+    for (int octave = 0; octave < 6; octave++)
+    {
+        if (octave >= _PathNoiseOctaves)
+            break;
+        float2 sample = coordinate * frequency;
+        float noise = ValueNoise(sample) * 2.0 - 1.0;
+        sum += noise * amplitude;
+        normalizer += amplitude;
+        frequency *= _PathNoiseLacunarity;
+        amplitude *= _PathNoiseGain;
+    }
+    return sum / max(normalizer, 0.0001);
 }
 
 float SpatialFalloff(float distanceFromSource)
@@ -157,9 +222,7 @@ void AddPathWave(uint3 dispatchId : SV_DispatchThreadID)
     uint id = dispatchId.x;
     if (id >= _PathSampleCount)
         return;
-    float arcDistance = _RestPathDistances[id];
-    float phase = _WavePhase + _Time * _WaveSpeed -
-        arcDistance * _WaveFrequency;
+    float phase = WavePhaseAt(id);
     float3 direction = normalize(_WaveDirection + float3(_Epsilon, 0.0, 0.0));
     _PathContributions[id] += direction * (sin(phase) * _WaveAmplitude *
         SpatialFalloff(distance(_RestPathPositions[id], _SourceCenter)));
@@ -183,11 +246,43 @@ void AddDynamicPathWave(uint3 dispatchId : SV_DispatchThreadID)
     uint id = dispatchId.x;
     if (id >= _PathSampleCount)
         return;
-    float arcDistance = _RestPathDistances[id];
-    float phase = _WavePhase + _Time * _WaveSpeed -
-        arcDistance * _WaveFrequency;
+    float phase = WavePhaseAt(id);
     float3 direction = normalize(_WaveDirection + float3(_Epsilon, 0.0, 0.0));
     _PathForces[id] += direction * (sin(phase) * _WaveAmplitude *
+        SpatialFalloff(distance(_RestPathPositions[id], _SourceCenter)));
+}
+
+[numthreads(64, 1, 1)]
+void AddPathNoise(uint3 dispatchId : SV_DispatchThreadID)
+{
+    uint id = dispatchId.x;
+    if (id >= _PathSampleCount)
+        return;
+    float u = _RestPathDistances[id] / max(_PathRestLength, _Epsilon);
+    float time = _PathNoisePhase + _Time * _PathNoiseSpeed;
+    float2 coordinate;
+    if (_PathClosed != 0)
+    {
+        float angle = u * 6.28318530718;
+        coordinate = float2(cos(angle), sin(angle)) *
+            max(_PathNoiseFrequency, 0.0001);
+    }
+    else
+    {
+        coordinate = float2(u, 0.0) *
+            max(_PathNoiseFrequency, 0.0001);
+    }
+    coordinate += float2(time, time * 0.61803398875);
+    float noise = saturate(
+        (PathNoiseSample(coordinate) + 1.0) * 0.5) * 2.0 - 1.0;
+    float3 basis = _RestPathTangents[id] * _PathNoiseBasis.x +
+        _RestPathNormals[id] * _PathNoiseBasis.y +
+        _RestPathBinormals[id] * _PathNoiseBasis.z;
+    basis = dot(basis, basis) > _Epsilon ? normalize(basis) : basis;
+    float3 fallback = _RestPathNormals[id];
+    basis = dot(basis, basis) > _Epsilon ? basis : fallback;
+    _PathContributions[id] += basis *
+        (noise * _PathNoiseAmplitude *
         SpatialFalloff(distance(_RestPathPositions[id], _SourceCenter)));
 }
 

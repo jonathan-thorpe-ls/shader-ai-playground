@@ -9,7 +9,9 @@ namespace Sonosthesia.ProcGeo
         [SerializeField] private bool deformationEnabled = true;
         [SerializeField, Min(0f)] private float forceAmplitude = 2f;
         [SerializeField] private Vector3 localDirection = Vector3.up;
-        [SerializeField, Min(0f)] private float spatialFrequency = 2f;
+        [SerializeField, Min(0f),
+         Tooltip("Open path: radians per local unit. Closed path: cycles per loop.")]
+        private float spatialFrequency = 2f;
         [SerializeField] private float speed = 1f;
         [SerializeField] private float phase;
 

@@ -145,6 +145,7 @@ namespace Sonosthesia.ProcGeo
         {
             command.SetComputeIntParam(_shader, "_PathSampleCount", _path.SampleCount);
             command.SetComputeIntParam(_shader, "_PathClosed", _path.Closed ? 1 : 0);
+            command.SetComputeFloatParam(_shader, "_PathRestLength", _path.RestLength);
             command.SetComputeIntParam(
                 _shader, "_VertexCount", _geometry.Layout.VertexCount);
             command.SetComputeFloatParam(_shader, "_Epsilon", 1e-6f);

@@ -25,6 +25,8 @@ The Phase 5 vertical slice is implemented in `ReactiveGeometry/`:
 - path-skinned base positions, normals and tangents;
 - separate `IPathDeformer` and `IVertexDeformer` scheduler stages;
 - path offset, bend, twist, dynamic wave and vertex-normal authoring components;
+- periodic 2D value-noise path deformation sampled through a circular
+  normalized-arc-length domain, with bounded fBM controls;
 - optional Phase 4-compatible Constant/Inverse/Smoothstep spatial falloff for
   every path and vertex deformer, with the component transform as source centre;
 - UI Toolkit component inspectors;
@@ -414,6 +416,31 @@ Maps phase and distance to a path-space offset:
 ```text
 phase = time * speed - distance * spatialFrequency
 ```
+
+For open paths, `spatialFrequency` is radians per local distance unit. For
+closed paths, it is cycles per complete loop:
+
+```text
+spatialPhase = (pathDistance / pathRestLength) *
+               spatialFrequency * 2 * PI
+```
+
+This closed-path interpretation keeps the final-to-first sample interval
+continuous for integer and non-integer cycle settings instead of ending at an
+unrelated phase.
+
+Path noise uses the normalized arc-length parameter in a circular 2D noise
+domain:
+
+```text
+angle = normalizedPathDistance * 2 * PI
+noiseCoordinate = (cos(angle), sin(angle)) * spatialFrequency + timeOffset
+```
+
+The first and last theoretical parameter values therefore map to the same
+coordinate, so the noise is seamless without requiring an integer frequency.
+Open paths use a linear 2D coordinate. fBM octaves are normalized and bounded
+before projection through the path tangent/normal/binormal basis.
 
 The deformer controls path sample displacement and, indirectly, the transported
 frame. Later audio controls modulate amplitude, speed or band weights rather
