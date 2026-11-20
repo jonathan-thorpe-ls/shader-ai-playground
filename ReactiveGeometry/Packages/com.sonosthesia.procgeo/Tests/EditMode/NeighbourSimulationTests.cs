@@ -128,6 +128,16 @@ namespace Sonosthesia.ProcGeo.Tests
         }
 
         [Test]
+        public void Simulation_LimitsInwardDisplacementSmoothly()
+        {
+            const float maximum = 0.05f;
+            float inward = MeasureInwardDisplacement(maximum);
+
+            Assert.That(inward, Is.GreaterThan(0f));
+            Assert.That(inward, Is.LessThanOrEqualTo(maximum + 1e-5f));
+        }
+
+        [Test]
         public void Simulation_PublishesFiniteUnitNormalsAndResetRestoresState()
         {
             using GeometryTestContext context = GeometryTestContext.Build(4);
@@ -301,6 +311,7 @@ namespace Sonosthesia.ProcGeo.Tests
                         (distance - restLengths[neighbourEdges[slot]]) *
                         edgeDirection;
                 }
+
                 force -= parameters.damping * velocities[vertex];
                 nextVelocities[vertex] =
                     velocities[vertex] + force * parameters.fixedDeltaTime;
@@ -309,6 +320,28 @@ namespace Sonosthesia.ProcGeo.Tests
                     nextVelocities[vertex] *= parameters.maximumVelocity / speed;
             }
             return nextVelocities;
+        }
+
+        private static float MeasureInwardDisplacement(float maximum)
+        {
+            using GeometryTestContext context = GeometryTestContext.Build(4);
+            using NeighbourSimulation simulation = new(context.Resource);
+            Vector3[] rest = context.Read<Vector3>(
+                context.Resource.Attributes.Require(AttributeIds.RestPosition).Buffer);
+            Vector3[] normals = context.Read<Vector3>(
+                context.Resource.Attributes.Require(AttributeIds.RestNormal).Buffer);
+            SimulationParameters parameters = SimulationParameters.Gentle;
+            parameters.stiffness = 0f;
+            parameters.restoringStiffness = 0f;
+            parameters.damping = 0f;
+            parameters.maximumInwardDisplacement = maximum;
+
+            const int vertex = 0;
+            simulation.ApplyImpulse(vertex, -normals[vertex], 10f);
+            simulation.Step(parameters.fixedDeltaTime, parameters);
+            Vector3 position = context.Read<Vector3>(
+                context.Resource.Live.Simulation.Position(simulation.ReadIndex))[vertex];
+            return -Vector3.Dot(position - rest[vertex], normals[vertex]);
         }
 
         private static DynamicVertexData[] ReadDynamicVertices(GeometryTestContext context)

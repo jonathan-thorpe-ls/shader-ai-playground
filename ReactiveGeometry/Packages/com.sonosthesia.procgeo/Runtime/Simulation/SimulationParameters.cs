@@ -15,6 +15,9 @@ namespace Sonosthesia.ProcGeo
         [Min(0f)] public float damping;
         [Min(0.001f)] public float maximumVelocity;
         [Min(0.001f)] public float maximumDisplacement;
+        [Min(0f), Tooltip(
+            "Maximum inward movement along the rest normal. Zero disables the limit.")]
+        public float maximumInwardDisplacement;
         public bool paused;
 
         public static SimulationParameters Nominal => new()
@@ -27,6 +30,7 @@ namespace Sonosthesia.ProcGeo
             damping = 2.5f,
             maximumVelocity = 12f,
             maximumDisplacement = 0.35f,
+            maximumInwardDisplacement = 0.25f,
             paused = false
         };
 
@@ -40,6 +44,7 @@ namespace Sonosthesia.ProcGeo
             damping = 4f,
             maximumVelocity = 30f,
             maximumDisplacement = 0.75f,
+            maximumInwardDisplacement = 0.5f,
             paused = false
         };
 
@@ -53,6 +58,7 @@ namespace Sonosthesia.ProcGeo
             damping = 3f,
             maximumVelocity = 6f,
             maximumDisplacement = 0.2f,
+            maximumInwardDisplacement = 0.15f,
             paused = false
         };
 
@@ -70,6 +76,12 @@ namespace Sonosthesia.ProcGeo
             ValidateFinite(ref result.damping, 0f, 16f, nameof(damping), issues);
             ValidateFinite(ref result.maximumVelocity, 0.001f, 100f, nameof(maximumVelocity), issues);
             ValidateFinite(ref result.maximumDisplacement, 0.001f, 2f, nameof(maximumDisplacement), issues);
+            ValidateFinite(
+                ref result.maximumInwardDisplacement,
+                0f,
+                2f,
+                nameof(maximumInwardDisplacement),
+                issues);
             return result;
         }
 
@@ -81,7 +93,8 @@ namespace Sonosthesia.ProcGeo
             value.restoringStiffness == 0f &&
             value.damping == 0f &&
             value.maximumVelocity == 0f &&
-            value.maximumDisplacement == 0f;
+            value.maximumDisplacement == 0f &&
+            value.maximumInwardDisplacement == 0f;
 
         public bool IsValid()
         {
@@ -94,7 +107,12 @@ namespace Sonosthesia.ProcGeo
                    Mathf.Approximately(value.restoringStiffness, restoringStiffness) &&
                    Mathf.Approximately(value.damping, damping) &&
                    Mathf.Approximately(value.maximumVelocity, maximumVelocity) &&
-                   Mathf.Approximately(value.maximumDisplacement, maximumDisplacement);
+                   Mathf.Approximately(
+                       value.maximumDisplacement,
+                       maximumDisplacement) &&
+                   Mathf.Approximately(
+                       value.maximumInwardDisplacement,
+                       maximumInwardDisplacement);
         }
 
         private static void ValidateFinite(

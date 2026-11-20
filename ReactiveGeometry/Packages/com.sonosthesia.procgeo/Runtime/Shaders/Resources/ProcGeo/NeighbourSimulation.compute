@@ -40,6 +40,7 @@ float _RestoringStiffness;
 float _Damping;
 float _MaximumVelocity;
 float _MaximumDisplacement;
+float _MaximumInwardDisplacement;
 
 static const uint DYNAMIC_VERTEX_STRIDE = 24;
 
@@ -71,6 +72,24 @@ void ApplyImpulse(uint3 id : SV_DispatchThreadID)
 bool IsFinite3(float3 value)
 {
     return isfinite(value.x) && isfinite(value.y) && isfinite(value.z);
+}
+
+float LimitInwardDisplacement(float displacement)
+{
+    if (_MaximumInwardDisplacement <= _Epsilon || displacement <= 0.0)
+        return displacement;
+    if (displacement >= _MaximumInwardDisplacement)
+        return _MaximumInwardDisplacement;
+
+    float transitionStart = 0.5 * _MaximumInwardDisplacement;
+    if (displacement <= transitionStart)
+        return displacement;
+
+    float transition = (displacement - transitionStart) /
+        (_MaximumInwardDisplacement - transitionStart);
+    return transitionStart +
+        (_MaximumInwardDisplacement - transitionStart) *
+        (transition * transition * (3.0 - 2.0 * transition));
 }
 
 [numthreads(64, 1, 1)]
@@ -141,6 +160,11 @@ void NeighbourIntegrate(uint3 id : SV_DispatchThreadID)
 
     float3 nextPosition = position + nextVelocity * _DeltaTime;
     float3 displacement = nextPosition - restPosition;
+    float inwardDisplacement = -dot(displacement, _RestNormals[vertex]);
+    float limitedInward = LimitInwardDisplacement(inwardDisplacement);
+    bool positionConstrained = limitedInward < inwardDisplacement;
+    displacement += (inwardDisplacement - limitedInward) * _RestNormals[vertex];
+    nextPosition = restPosition + displacement;
     float displacementMagnitude = length(displacement);
     if (!IsFinite3(nextPosition))
     {
@@ -155,8 +179,12 @@ void NeighbourIntegrate(uint3 id : SV_DispatchThreadID)
         nextPosition = restPosition +
             displacement * (_MaximumDisplacement / max(displacementMagnitude, _Epsilon));
         displacementMagnitude = _MaximumDisplacement;
+        positionConstrained = true;
         InterlockedAdd(_SimulationStatus[2], 1);
     }
+
+    if (positionConstrained)
+        nextVelocity = (nextPosition - position) / max(_DeltaTime, _Epsilon);
 
     _WriteVelocities[vertex] = nextVelocity;
     _WritePositions[vertex] = nextPosition;

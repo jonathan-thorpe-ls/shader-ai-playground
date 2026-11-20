@@ -167,6 +167,10 @@ namespace Sonosthesia.ProcGeo
                 command.SetComputeFloatParam(_shader, "_MaximumVelocity", parameters.maximumVelocity);
                 command.SetComputeFloatParam(
                     _shader, "_MaximumDisplacement", parameters.maximumDisplacement);
+                command.SetComputeFloatParam(
+                    _shader,
+                    "_MaximumInwardDisplacement",
+                    parameters.maximumInwardDisplacement);
                 command.SetComputeBufferParam(
                     _shader, _integrateKernel, "_ReadPositions",
                     _resource.Live.Simulation.Position(read));
@@ -187,6 +191,8 @@ namespace Sonosthesia.ProcGeo
                     _resource.Live.Simulation.Status);
                 BindAttribute(
                     command, _integrateKernel, "_RestPositions", AttributeIds.RestPosition);
+                BindAttribute(
+                    command, _integrateKernel, "_RestNormals", AttributeIds.RestNormal);
                 BindAttribute(command, _integrateKernel, "_Masses", AttributeIds.Mass);
                 BindTopology(command, _integrateKernel);
                 command.BeginSample("ProcGeo.Simulation.Step");

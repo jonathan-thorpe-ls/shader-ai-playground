@@ -109,12 +109,18 @@ restoringStiffness   restoring-to-rest coefficient
 damping              velocity-proportional damping
 maximumVelocity      finite positive m/s
 maximumDisplacement  finite positive distance
+maximumInwardDisplacement  maximum inward normal displacement
 paused
 ```
 
 Defaults must be selected by testing a unit-radius icosphere at frequencies 4, 8 and 16. Validate and clamp in an explicit `SimulationParameters.Validate(...)` method. Invalid values must be reported to the component rather than silently converted during every frame.
 
 Runtime parameter edits regenerate neither geometry nor topology. They affect the next simulation step.
+Inward displacement is measured along the rest normal and approaches its
+configured hard maximum through a smoothstep transition beginning at half the
+maximum. This keeps the control to one intuitive distance while avoiding an
+abrupt velocity reversal at the limit. Zero disables the limit. Outward and
+tangential displacement are unchanged.
 
 ### 3.4 Solver status
 
