@@ -1,0 +1,23 @@
+{
+  "name": "Sonosthesia.Xas.Tests.EditMode",
+  "rootNamespace": "Sonosthesia.Xas.Tests",
+  "references": [
+    "Sonosthesia.Xas.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

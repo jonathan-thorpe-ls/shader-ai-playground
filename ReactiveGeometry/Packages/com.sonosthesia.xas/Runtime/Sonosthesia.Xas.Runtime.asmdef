@@ -1,0 +1,14 @@
+{
+  "name": "Sonosthesia.Xas.Runtime",
+  "rootNamespace": "Sonosthesia.Xas",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

@@ -1,0 +1,10 @@
+{
+  "name": "com.sonosthesia.xas",
+  "displayName": "Sonosthesia XAS",
+  "version": "0.1.0",
+  "unity": "6000.6",
+  "description": "Seekable, allocation-conscious reader for Sonosthesia streaming audio analysis files.",
+  "dependencies": {
+    "com.unity.test-framework": "1.8.0"
+  }
+}
