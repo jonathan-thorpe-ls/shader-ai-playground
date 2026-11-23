@@ -254,11 +254,31 @@ namespace Sonosthesia.ProcGeo
             ValidateSimulationParameters();
         }
 
+        public void SetRuntimeSimulationControls(float newStiffness, float newDamping)
+        {
+            simulationParameters.stiffness = Mathf.Clamp(newStiffness, 0f, 240f);
+            simulationParameters.damping = Mathf.Clamp(newDamping, 0f, 16f);
+            _validatedParameters.stiffness = simulationParameters.stiffness;
+            _validatedParameters.damping = simulationParameters.damping;
+        }
+
         public void SetFieldSettings(GeometryFieldSettings settings)
         {
             fieldSettings = settings;
             if (_resource != null && simulationEnabled)
                 RebuildFields();
+        }
+
+        public void SetRuntimeFieldControls(float pulseAmplitude, float directionalStrength)
+        {
+            fieldSettings.pulseAmplitude = Mathf.Clamp(
+                SpatialDeformationValidation.Finite(pulseAmplitude, 0f),
+                0f,
+                240f);
+            fieldSettings.directionalStrength = Mathf.Clamp(
+                SpatialDeformationValidation.Finite(directionalStrength, 0f),
+                0f,
+                240f);
         }
 
         public void RegisterField(IGeometryField field)

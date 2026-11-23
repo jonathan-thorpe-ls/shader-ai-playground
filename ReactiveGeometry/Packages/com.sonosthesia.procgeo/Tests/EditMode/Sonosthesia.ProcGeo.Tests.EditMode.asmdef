@@ -2,6 +2,7 @@
   "name": "Sonosthesia.ProcGeo.Tests.EditMode",
   "rootNamespace": "Sonosthesia.ProcGeo.Tests",
   "references": [
+    "Sonosthesia.Signals.Runtime",
     "Sonosthesia.ProcGeo.Runtime",
     "Sonosthesia.ProcGeo.Runtime.URP"
   ],

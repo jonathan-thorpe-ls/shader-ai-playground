@@ -5,8 +5,28 @@
       "depth": 0,
       "source": "embedded",
       "dependencies": {
+        "com.sonosthesia.signals": "0.1.0",
         "com.unity.render-pipelines.universal": "17.6.0",
         "com.unity.test-framework": "1.8.0"
+      }
+    },
+    "com.sonosthesia.signals": {
+      "version": "file:com.sonosthesia.signals",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.test-framework": "1.8.0"
+      }
+    },
+    "com.sonosthesia.signals.xas": {
+      "version": "file:com.sonosthesia.signals.xas",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.sonosthesia.signals": "0.1.0",
+        "com.sonosthesia.xas": "0.1.0",
+        "com.unity.test-framework": "1.8.0",
+        "com.unity.timeline": "6.6.0"
       }
     },
     "com.sonosthesia.xas": {
@@ -176,6 +196,17 @@
       "dependencies": {
         "com.unity.test-framework": "1.1.33",
         "com.unity.modules.jsonserialize": "1.0.0"
+      }
+    },
+    "com.unity.timeline": {
+      "version": "6.6.0",
+      "depth": 0,
+      "source": "builtin",
+      "dependencies": {
+        "com.unity.modules.director": "1.0.0",
+        "com.unity.modules.animation": "1.0.0",
+        "com.unity.modules.audio": "1.0.0",
+        "com.unity.modules.particlesystem": "1.0.0"
       }
     },
     "com.unity.ugui": {

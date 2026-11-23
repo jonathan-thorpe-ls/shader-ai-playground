@@ -1,0 +1,25 @@
+{
+  "name": "Sonosthesia.Signals.Xas.Tests.EditMode",
+  "rootNamespace": "Sonosthesia.Signals.Xas.Tests",
+  "references": [
+    "Sonosthesia.Signals.Runtime",
+    "Sonosthesia.Signals.Xas.Runtime",
+    "Sonosthesia.Xas.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

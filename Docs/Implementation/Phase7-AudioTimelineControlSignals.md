@@ -20,6 +20,25 @@ delivery. Once the graph and adapter path is proven, the same controls can be
 bound to Phase 4 surfaces, Phase 5 paths and Phase 6 branches without changing
 the Timeline or graph runtime.
 
+## Implementation status
+
+The Phase 7 vertical slice is implemented:
+
+- `com.sonosthesia.signals` supplies provider-neutral profiles, frames,
+  Graph Toolkit compilation, fixed-buffer execution and control-slot routing;
+- `com.sonosthesia.signals.xas` supplies the XAS provider, `XasTrack`,
+  `XasPlayableAsset`, Timeline overlap blending and XAS convenience nodes;
+- `com.sonosthesia.procgeo` supplies `ProceduralMeshControlSlots`;
+- `Assets/TestScenes/Phase7` contains the generated graph, Timeline and
+  single-renderer demo scene;
+- `Assets/StreamingAssets/Phase7/Synthetic.xas` supplies a small repeatable
+  demo input.
+
+The graph importer, XAS bridge, zero-allocation warmed evaluator, procedural
+adapter and existing Phase 1-6 EditMode/PlayMode regression suites are tested.
+Live Play Mode verification showed the Timeline graph updating procedural
+field amplitude and simulation stiffness through typed routes.
+
 ## 1. Decisions
 
 The following choices define this plan:

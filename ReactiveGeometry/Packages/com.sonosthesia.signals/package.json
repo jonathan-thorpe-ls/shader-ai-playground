@@ -1,0 +1,10 @@
+{
+  "name": "com.sonosthesia.signals",
+  "displayName": "Sonosthesia Control Signals",
+  "version": "0.1.0",
+  "unity": "6000.6",
+  "description": "Provider-neutral control signal graphs, routing and typed consumers.",
+  "dependencies": {
+    "com.unity.test-framework": "1.8.0"
+  }
+}

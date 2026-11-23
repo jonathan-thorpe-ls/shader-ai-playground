@@ -30,6 +30,11 @@ namespace Sonosthesia.ProcGeo
 
         public int ActiveEventCount => _pool?.ActiveCount ?? 0;
 
+        public void Configure(ProceduralMeshRenderer renderer)
+        {
+            target = renderer;
+        }
+
         public uint TriggerImpulse()
         {
             if (!TryGetEventContext(out Vector3 center, out Vector3 direction))

@@ -5,6 +5,7 @@
   "unity": "6000.6",
   "description": "GPU geometry generation, topology and URP mesh rendering.",
   "dependencies": {
+    "com.sonosthesia.signals": "0.1.0",
     "com.unity.render-pipelines.universal": "17.6.0",
     "com.unity.test-framework": "1.8.0"
   }

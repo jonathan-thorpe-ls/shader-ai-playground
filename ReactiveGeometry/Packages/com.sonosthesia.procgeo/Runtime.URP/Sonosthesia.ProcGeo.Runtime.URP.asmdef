@@ -2,6 +2,7 @@
   "name": "Sonosthesia.ProcGeo.Runtime.URP",
   "rootNamespace": "Sonosthesia.ProcGeo",
   "references": [
+    "Sonosthesia.Signals.Runtime",
     "Sonosthesia.ProcGeo.Runtime",
     "Unity.RenderPipelines.Core.Runtime",
     "Unity.RenderPipelines.Universal.Runtime"

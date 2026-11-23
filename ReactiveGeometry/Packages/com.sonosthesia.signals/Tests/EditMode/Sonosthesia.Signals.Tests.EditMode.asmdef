@@ -1,0 +1,24 @@
+{
+  "name": "Sonosthesia.Signals.Tests.EditMode",
+  "rootNamespace": "Sonosthesia.Signals.Tests",
+  "references": [
+    "Sonosthesia.Signals.Runtime",
+    "Sonosthesia.Signals.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

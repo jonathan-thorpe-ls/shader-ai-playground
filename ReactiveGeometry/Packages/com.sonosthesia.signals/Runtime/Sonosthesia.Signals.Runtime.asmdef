@@ -1,0 +1,14 @@
+{
+  "name": "Sonosthesia.Signals.Runtime",
+  "rootNamespace": "Sonosthesia.Signals",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

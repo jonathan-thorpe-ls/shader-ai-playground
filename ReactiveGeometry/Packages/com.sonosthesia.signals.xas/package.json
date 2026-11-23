@@ -1,0 +1,13 @@
+{
+  "name": "com.sonosthesia.signals.xas",
+  "displayName": "Sonosthesia XAS Timeline Signals",
+  "version": "0.1.0",
+  "unity": "6000.6",
+  "description": "XAS and Unity Timeline integration for provider-neutral control signals.",
+  "dependencies": {
+    "com.sonosthesia.signals": "0.1.0",
+    "com.sonosthesia.xas": "0.1.0",
+    "com.unity.test-framework": "1.8.0",
+    "com.unity.timeline": "6.6.0"
+  }
+}
