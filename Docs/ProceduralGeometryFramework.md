@@ -713,6 +713,11 @@ audio mappings. Prove distinct bass, mid, high and onset responses across the
 icosphere, Phase 4 surfaces, Phase 5 paths and Phase 6 branch paths while
 preserving simulation stability.
 
+The XAS-first implementation plan, including Unity Timeline ingestion, Graph
+Toolkit compilation, control-slot routing and the single-renderer vertical
+slice, is in
+[Phase7-AudioTimelineControlSignals.md](Implementation/Phase7-AudioTimelineControlSignals.md).
+
 ### Phase 8 — VR interaction
 
 Introduce provider-independent interaction sources, fields, events and grab constraints. Start with one fingertip touching/pushing a grid, then add pinch, hit, grab and two-hand interaction, with a spatial broad phase and haptics/feedback.
