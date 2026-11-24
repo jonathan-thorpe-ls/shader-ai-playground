@@ -11,24 +11,27 @@ extends that foundation without changing its dependency direction:
 
 - `com.sonosthesia.signals` remains independent of XAS and Timeline;
 - `com.sonosthesia.signals.xas` remains the XAS integration layer;
-- manual curves enter through standard Unity AnimationTracks;
+- manual curves enter through a dedicated custom `ManualControlTrack` that
+  uses Timeline's built-in Curves View;
 - the graph decides how manual, XAS and future provider signals combine.
 
-The completion slice is one Timeline containing an XAS control track and an
-AnimationTrack, both feeding one control graph. The graph produces Vector2,
+The completion slice is one Timeline containing an XAS control track and a
+manual-control curve track, both feeding one control graph. The graph produces Vector2,
 Vector3 and Color outputs into a generic test consumer. Procedural geometry
 specific consumers are later adapters, not Phase 8 architecture owners.
 
 ## 1. Decisions
 
-- Manual curve authoring uses a standard Unity AnimationTrack.
-- The AnimationTrack binds to `ControlSignalTarget`.
-- Four animatable manual inputs are provided: `ManualInput0` through
-  `ManualInput3`.
+- Manual curve authoring uses a custom `ManualControlTrack` and
+  `ManualControlPlayableAsset`.
+- The track binds to `ControlSignalTarget` directly.
+- A manual clip may own an arbitrary configured channel set. Each channel has a
+  stable slot/index, a signal name and one float curve. There is no
+  `ControlSignalTarget` slot bank and no transform/property hierarchy.
 - Manual values remain separate named graph inputs. Graph nodes determine
   add, multiply, override, mix or modulation semantics.
-- Overlapping AnimationTrack clips use Unity's normalized AnimationTrack clip
-  blending.
+- Overlapping manual clips with the same signal name use normalized Timeline
+  input-weight blending.
 - Phase 8 adds Vector2, Vector3 and Color graph values, operations, outputs
   and slots.
 - Initial scalar-to-vector generators include polar, cylindrical, spherical,
@@ -48,23 +51,23 @@ Phase 8 will:
 2. add Vector2, Vector3 and Color to the control graph and routing contracts;
 3. add typed vector and color operations;
 4. add parameterized scalar-to-vector and scalar-to-color generators;
-5. expose four manual Timeline-animatable scalar inputs on
-   `ControlSignalTarget`;
-6. merge a current provider frame with current manual AnimationTrack values
+5. provide a Timeline-native curve set for arbitrary named float controls;
+6. merge a current XAS/provider frame with current manual-curve values
    before graph evaluation;
 7. compile manual and provider source names into the same provider-neutral
    runtime graph;
 8. provide deterministic Brownian and noise path generators suitable for
    scrubbing;
 9. prove the hybrid signal path without steady-state managed allocation;
-10. avoid adding a custom Timeline track or graph-specific Timeline mixer.
+10. reuse the supported custom-track extension point without implementing a
+    replacement curve/keyframe editor.
 
 ## 3. Non-goals
 
 Phase 8 does not:
 
 - add live audio analysis;
-- create custom curve-editing UI that duplicates Unity's AnimationTrack;
+- implement a second curve/keyframe editor;
 - make XAS aware of manually authored curves;
 - make manual curves aware of XAS;
 - allow arbitrary reflection-based animation bindings;
@@ -84,12 +87,12 @@ XAS Timeline track ----------------+
                                    v
                          provider ControlSignalFrame
                                    |
-standard AnimationTrack -----+      |
-animates ManualInput0..3      |    |
+ManualControlTrack ----------+      |
+clip with named curve channels|    |
                               v    v
                      ControlSignalTarget
                      - retain provider frame
-                     - sample four manual inputs
+                     - merge named manual values
                      - merge by stable signal ID
                      - evaluate typed graph
                               |
@@ -118,7 +121,7 @@ The target does not perform an implicit audio/manual blend.
 
 No XAS reference is added to `com.sonosthesia.signals`.
 
-Changes are primarily within:
+The typed graph/runtime changes remain in the provider-neutral core:
 
 ```text
 Packages/com.sonosthesia.signals
@@ -128,16 +131,37 @@ Packages/com.sonosthesia.signals
     ControlGraphExecutor.cs
     ControlSignalTarget.cs
     IControlVectorSlotTargets.cs
-    ManualControlInputBindings.cs
   Editor/Graph/
     ControlSignalNodes.cs
     ControlSignalGraphImporter.cs
   Tests/EditMode/
     TypedControlGraphTests.cs
-    ManualInputTests.cs
   Tests/PlayMode/
     TimelineHybridControlTests.cs
 ```
+
+Manual curve Timeline integration is a separate package so the core signal
+package remains independent of Unity Timeline:
+
+```text
+Packages/com.sonosthesia.signals.timeline
+  package.json
+  Runtime/
+    Sonosthesia.Signals.Timeline.Runtime.asmdef
+    ManualControlTrack.cs
+    ManualControlPlayableAsset.cs
+    ManualControlBehaviour.cs
+    ManualControlTrackMixerBehaviour.cs
+  Editor/
+    Sonosthesia.Signals.Timeline.Editor.asmdef
+    ManualControlClipEditor.cs
+  Tests/EditMode/
+  Tests/PlayMode/
+    ManualControlTrackTests.cs
+```
+
+Its dependencies are `com.sonosthesia.signals` and `com.unity.timeline`. It
+does not depend on XAS, a particular audio package, or procedural geometry.
 
 `com.sonosthesia.signals.xas` remains unchanged in dependency direction. It
 may gain Phase 8 interoperability tests, but it does not depend on vector,
@@ -209,86 +233,185 @@ bool TryGetOutput(int index, out Color value);
 Returning the wrong type is a false result or a clearly reported invalid access;
 it must never reinterpret components silently.
 
-## 7. Manual AnimationTrack inputs
+## 7. Manual named-curve track
 
-### Fixed bank
+### Existing Timeline track candidates
 
-`ControlSignalTarget` exposes four serialized, animatable fields:
+- `AnimationTrack` provides rich curve editing, but it animates a bound
+  Animator/AnimationClip and carries transform, hierarchy, masking, offsets and
+  animation-state meaning that is unrelated to generic control signals.
+- `AudioTrack` reuses Timeline's curve UI, but only for its audio-specific
+  properties: Volume, Stereo Pan and Spatial Blend.
+- Activation, Control, Signal and other standard tracks do not provide
+  arbitrary named float curve data.
 
-```text
-ManualInput0
-ManualInput1
-ManualInput2
-ManualInput3
-```
+Therefore there is no existing built-in track with the desired semantics. The
+appropriate extension is a custom `TrackAsset` plus `PlayableAsset`, while
+reusing Timeline's existing curve UI through a serializable playables
+template.
 
-They are ordinary public properties backed by serialized floats so Unity's
-AnimationTrack can discover and animate them.
+### Track and clip model
 
-Each slot also has an authoring binding:
+Add `ManualControlTrack` in `com.sonosthesia.signals.timeline`, a normal custom
+`TrackAsset` that binds to
+`ControlSignalTarget`.
+
+The track accepts `ManualControlPlayableAsset` clips. The target model is a
+multi-channel clip:
 
 ```csharp
-struct ManualControlInputBinding
+[Serializable]
+public sealed class ManualControlChannel
 {
-    bool enabled;
-    string signalName;
-    float defaultValue;
+    public string signalName;
+    public float value;
+}
+
+[Serializable]
+public sealed class ManualControlBehaviour : PlayableBehaviour
+{
+    public List<ManualControlChannel> channels = new();
 }
 ```
 
-The binding index is fixed. Signal names become stable `ControlSignalId`
-values at target initialization.
+The asset creates its playable with:
 
-Recommended names for the Phase 8 demo:
-
-```text
-manual.input0
-manual.input1
-manual.input2
-manual.input3
+```csharp
+ScriptPlayable<ManualControlBehaviour>.Create(graph, template);
 ```
 
-Users may rename the IDs to meaningful graph inputs such as
-`manual.baseAmplitude` or `manual.hue`.
+This follows Unity's supported Timeline customization pattern: a serializable
+`PlayableBehaviour` is supplied as the template, and Timeline exposes its
+serialized fields as animated clip properties. The built-in Timeline Curves
+View then provides key insertion, tangent editing, selection, zoom and
+scrubbing for each channel's `value` curve.
 
-### Availability and defaults
+Unity's Timeline package demonstrates the same mechanism in its Time Dilation
+custom-track sample: a serializable `PlayableBehaviour` template exposes one
+float (`timeScale`), the custom track mixer reads the animated clone and the
+normal Curves View edits the field. Phase 8 generalizes that pattern to an
+author-configured list of channel values.
 
-- Enabled manual slots are always available to the graph.
-- Their current value is the serialized/animated property value.
-- Outside an active AnimationTrack clip, Unity's normal AnimationTrack behavior
-  returns the property to its authoring/default state according to the
-  track's extrapolation settings.
-- A disabled slot is unavailable and cannot satisfy a required graph source.
-- A graph may reference a manual signal name even when no provider currently
-  emits that name.
+Implementation difficulty is moderate, not high:
 
-### Provider/profile merge
+- the runtime track/clip/mixer pattern is small and already proven by Unity;
+- reusing the Curves View requires no Timeline internals and no custom UI
+  toolkit curve editor;
+- most work is validation, naming, normalized blending and provider identity,
+  rather than Timeline playables or keyframe editing;
+- a custom `ClipEditor` is optional and only affects clip title/color/Inspector
+  presentation.
 
-Before graph evaluation:
+There is no fundamental limit on how many curves the Curves View can show. The
+feasibility issue is mapping a dynamic user-visible channel name to the stable
+serialized property path of an AnimationClip. A channel name cannot become a
+C# field name at runtime. Phase 8 therefore targets stable list indices as
+binding identities and a separate signal-name registry:
 
-1. copy the active provider frame into target-owned graph input buffers;
-2. resolve each manual binding to a compiled graph continuous source index;
-3. write the current `ManualInput0...3` values;
-4. mark those inputs available;
-5. preserve pulse buffers from the provider;
-6. evaluate the graph once.
+```text
+binding path: channels.Array.data[3].value
+signal name:  manual.hue
+display name: Manual / Hue
+```
 
-If a provider and a manual slot use the same stable ID, target validation
-reports a collision. Phase 8 does not define precedence implicitly.
+Adding a channel appends a stable binding slot. Renaming changes only the
+registry label. Removing a channel marks it retired instead of immediately
+reusing its index, so existing curve bindings remain unambiguous. A clip may
+compact retired indices through an explicit migration action.
+
+This avoids AnimationTrack semantics:
+
+- no Animator;
+- no bound GameObject hierarchy;
+- no Transform/property binding;
+- no animation rig or humanoid/generic animation configuration;
+- no custom keyframe editor.
+
+One clip may contain `manual.radius`, `manual.hue` and `manual.excitation`
+alongside XAS clips on another track. Multiple manual clips may also coexist,
+each with a different or overlapping channel set.
+
+### Curves View scope
+
+The Curves View edits the selected clip's channel value fields:
+
+- each channel maps by stable index to one control ID;
+- each clip has independent duration, trim, extrapolation and blending;
+- overlapping clips can be blended by their signal name;
+- adding, renaming and retiring channels use an explicit registry operation.
+
+Timeline remains the keyframe/tangent editor. A custom `ClipEditor`/Inspector
+maps internal binding paths to readable channel names and provides
+add/rename/retire actions.
+
+### Feasibility spike
+
+Before committing the multi-channel representation, M2 verifies on Unity
+6000.6 that:
+
+1. list elements on a serializable `PlayableBehaviour` template appear as
+   editable Timeline clip curves;
+2. appending a channel preserves earlier bindings;
+3. animated clones provide the correct values to the mixer;
+4. curves survive save, close and reopen;
+5. reorder is prohibited or explicitly migrated;
+6. the playable works in a player build.
+
+If list-element bindings are not reliably supported, Phase 8 uses the proven
+fallback: one serializable `value` field per clip with unlimited clips in the
+track. That fallback still supports arbitrarily many named controls and uses
+the same mixer and graph contracts; only grouping changes.
+
+### Mixer behavior
+
+`ManualControlTrackMixerBehaviour`:
+
+1. resolves each channel's `signalName` to a stable `ControlSignalId`;
+2. reads each Timeline-animated `value` from current behaviour clones;
+3. groups active channels across all clips by signal ID;
+4. blends same-signal clips with normalized `Playable.GetInputWeight`;
+5. emits a provider-neutral manual continuous frame to the bound
+   `ControlSignalTarget`.
+
+Different signal names do not blend with one another. If one signal has no
+active clip/channel or active weight, it is reported unavailable unless an
+explicit track/target default-value policy is enabled.
+
+The mixer stores no string-keyed dictionary on the frame path. Signal IDs,
+channel indices and per-signal output indices are resolved once and stored in
+compact arrays.
+
+### Combining with XAS
+
+The manual track and XAS track remain completely independent assets and
+tracks. `ControlSignalTarget` merges provider frames by stable signal ID:
+
+1. XAS submits its current provider frame;
+2. manual curves submit a provider frame with only manual IDs;
+3. the target combines the named sources into a single graph input buffer;
+4. the graph performs add, multiply, mix, override or other combination
+   semantics explicitly.
+
+Manual and XAS IDs must be distinct unless a future blend policy is explicitly
+authored. Duplicate IDs from independent providers are reported rather than
+silently overwriting each other.
 
 ### Timeline evaluation order
 
-Standard Timeline tracks do not provide a reliable contract for arbitrary
-cross-track `ProcessFrame` ordering. The XAS track therefore submits the
-provider frame to `ControlSignalTarget`; when manual inputs are configured,
-the target defers graph evaluation to `LateUpdate`.
+The manual track is a normal Timeline mixer like the XAS track. The target may
+receive either track first. It therefore does not immediately discard the
+previous provider frame; it caches the most recent frame per independent
+provider stream for the current Timeline evaluation.
 
-This ensures the active AnimationTrack has written its properties before the
-graph reads them. Targets without manual inputs may preserve Phase 7 immediate
-evaluation.
+Graph evaluation is triggered after both relevant mixer passes for the
+Timeline frame, preferably from a provider-agnostic deferred target update.
+PlayMode uses `LateUpdate`; Editor scrubbing uses Timeline's editor update
+callback. If only one provider track is present, the target evaluates with
+that provider's frame without waiting for a missing one.
 
-During EditMode scrubbing, the target uses the editor update/evaluation path
-rather than relying on PlayMode `LateUpdate` alone.
+This ordering mechanism is internal to the target/provider contract. It does
+not couple XAS to manual curves or require either track to know the other's
+implementation.
 
 ## 8. Graph authoring and compiler
 
@@ -296,13 +419,10 @@ rather than relying on PlayMode `LateUpdate` alone.
 
 Phase 8 retains existing XAS and generic provider input nodes and adds:
 
-- `Manual Input 0`
-- `Manual Input 1`
-- `Manual Input 2`
-- `Manual Input 3`
+- `Manual Signal Input`, configured with a stable signal name.
 
-These compile to provider-neutral source IDs selected by the corresponding
-manual binding definitions. They do not embed AnimationTrack or XAS types.
+It compiles to a provider-neutral source ID and does not embed Timeline,
+`ManualControlTrack`, or XAS types.
 
 ### Basic typed operations
 
@@ -587,8 +707,8 @@ Create a Phase 8 test scene:
 
 - one `PlayableDirector`;
 - one Phase 7 `XasTrack`;
-- one standard AnimationTrack bound to `ControlSignalTarget`;
-- four animated manual properties, with no custom Timeline editor;
+- one `ManualControlTrack` bound to `ControlSignalTarget`;
+- one named manual curve clip per required manual signal;
 - one `.controlgraph` asset;
 - one `HybridControlConsumer` test component.
 
@@ -597,13 +717,13 @@ Example graph:
 ```text
 XAS RMS ------------- Remap ---+
                                Add ---> Polar radius ---> Vector2 Output
-ManualInput0 ------------------+
+manual.radius -----------------+
 
-ManualInput1 ----------------- Cylindrical angle ----------+
+manual.angle ----------------- Cylindrical angle ----------+
 XAS Lows ----- Remap --------- Cylindrical radius ---------+-> Vector3 Output
-ManualInput2 ----------------- Cylindrical height ---------+
+manual.height ---------------- Cylindrical height ---------+
 
-ManualInput3 ---- HSV Hue
+manual.hue ----- HSV Hue
 XAS Highs ---- Remap ---- HSV Value --------------------------> Color Output
 ```
 
@@ -620,8 +740,8 @@ preview without coupling the implementation to a procedural mesh.
 
 The UI remains a simple UI Toolkit component inspector:
 
-- manual slot names and enabled state;
-- current manual values;
+- active manual channel names and blend weights;
+- current named manual values;
 - latest typed graph outputs;
 - route state;
 - evaluation timing;
@@ -632,8 +752,8 @@ The UI remains a simple UI Toolkit component inspector:
 For the Phase 8 gate:
 
 - one XAS track;
-- one AnimationTrack;
-- four manual inputs;
+- one manual curve track;
+- named manual clips as authored for the demo;
 - one graph with up to 64 operations;
 - up to 12 typed routes;
 - target evaluation at 120 Hz.
@@ -646,13 +766,14 @@ Budgets:
 - no graph importer/runtime reference to `Unity.GraphToolkit.Editor`;
 - no XAS dependency added to the core signals package;
 - no reflection or dictionary lookup in the frame loop;
-- no full graph rebuild when an AnimationTrack property changes;
+- no full graph rebuild when a manual clip value changes;
 - CPU graph/routing time <= 0.35 ms at the 99th percentile on the documented
   desktop baseline;
 - Brownian/oscillator output deterministic for identical Timeline time;
 - no whole-file XAS loading.
 
-Manual slot names resolve to indices during target rebuild. Typed route targets
+Manual signal names and clip IDs resolve during Timeline graph build or target
+rebuild. Typed route targets
 resolve by ID and handle once. Brownian functions use fixed bounded loops and
 preallocated operation state; they do not generate lists or random-number
 objects.
@@ -675,14 +796,15 @@ objects.
 
 ### Manual input and Timeline PlayMode
 
-- four `ManualInput` properties are discoverable by AnimationTrack;
+- configured channel `value` fields appear in Timeline Curves View;
 - manual and XAS inputs coexist in one target;
 - graph sees manual values as separate named sources;
-- one AnimationTrack clip updates the mapped manual input;
-- overlapping clips use Unity's normalized animation blending;
-- track silence/lead-in/outro returns serialized/default manual values;
-- deferred `LateUpdate` evaluation prevents a one-frame ordering dependency;
-- EditMode Timeline scrubbing updates manual inputs and typed outputs;
+- one multi-channel clip updates each named graph input;
+- overlapping same-name clips use normalized Timeline input-weight blending;
+- different-name clips remain independent;
+- clip extrapolation and default-value policy are deterministic;
+- deferred evaluation prevents a one-frame provider-track ordering dependency;
+- EditMode Timeline scrubbing updates manual curves and typed outputs;
 - reversing or jumping Timeline time resets only stateful nodes and re-evaluates
   stateless vector/color/Brownian nodes exactly.
 
@@ -698,7 +820,7 @@ objects.
 - Run Phase 7 XAS tests;
 - run Phase 1-7 EditMode and PlayMode suites;
 - verify no extra GPU buffers, geometry readbacks or resource lifetime changes;
-- profile XAS plus AnimationTrack plus typed graph execution together.
+- profile XAS plus the manual curve track plus typed graph execution together.
 
 ## 15. Milestones
 
@@ -713,13 +835,20 @@ objects.
 
 ### M2 - Manual Timeline inputs
 
-- Add `ManualInput0...3`.
-- Add four manual signal bindings and stable-ID resolution.
+- Create `com.sonosthesia.signals.timeline`.
+- Run the Unity 6000.6 multi-channel binding feasibility spike.
+- Add `ManualControlTrack`, `ManualControlPlayableAsset` and
+  `ManualControlBehaviour`.
+- Add stable channel indices, signal-name resolution and normalized
+  same-signal mixer behavior.
 - Merge provider and manual values before execution.
-- Add deferred evaluation for AnimationTrack ordering.
+- Add the standard serialized-behaviour Curves View authoring pattern.
+- Add deferred evaluation for cross-track ordering.
 
-**Gate:** one standard AnimationTrack animates one manual signal and a test
-graph reads it without XAS.
+**Gate:** one custom manual clip exposes multiple stable named channels through
+the native Timeline Curves View and a test graph reads them without XAS. If
+the spike rejects list bindings, the approved fallback is unlimited
+single-value clips using the same track and mixer contracts.
 
 ### M3 - Vector graph and generators
 
@@ -744,7 +873,7 @@ boundedness.
 
 - Add additive Vector2/Vector3/Color slot interfaces.
 - Add generic `HybridControlConsumer`.
-- Add Phase 8 Timeline/Animation/XAS demo.
+- Add Phase 8 ManualControl/XAS/typed-output Timeline demo.
 - Add UI Toolkit inspectors.
 
 **Gate:** one Timeline drives three typed outputs into the same generic
@@ -765,15 +894,15 @@ all previous suites remain green.
 
 | Risk | Mitigation |
 | --- | --- |
-| AnimationTrack writes manual properties after the XAS track evaluates | deferred evaluation at `LateUpdate` / explicit edit-time evaluation |
-| Fixed four-slot bank is too restrictive | stable bindings cover the phase gate; a generated/custom target can extend later |
+| Manual and XAS tracks evaluate in different orders | target caches provider frames by stream and evaluates once from a deferred update |
+| Dynamic channel names create fragile serialized AnimationClip paths | stable list indices are binding identities; names live in separate metadata and channel insertion is append-only |
 | Typed runtime values cause broad Phase 7 breakage | retain float/pulse enum values, APIs and tests; add typed operations incrementally |
 | Graph types are connected incorrectly | explicit typed GTK ports plus importer validation on Unity 6000.6 |
 | Brownian output depends on frame history | use deterministic absolute-time noise, not a random walk |
 | Gradient storage requires Editor/runtime coupling | compact importer-owned runtime keys; no `AnimationCurve`/Editor graph dependency |
 | Vector/Color boxing occurs at route dispatch | direct typed value storage and additive typed sink interfaces |
 | Manual IDs collide with XAS/provider IDs | target validation rejects duplicate stable IDs |
-| Multiple AnimationTracks fight over one manual property | document one owning AnimationTrack and report conflicting bindings when detectable |
+| Multiple clips claim the same manual signal unintentionally | same-name overlap is a supported normalized blend; duplicate clip validation remains visible |
 | Existing procedural targets must understand vectors/colors | slot interfaces are additive; no Phase 7 consumer is forced to implement them |
 | Color-space conversion produces inconsistent output | define and test linear/RGB/HSV policy explicitly |
 
@@ -787,8 +916,8 @@ Phase 8 is complete when:
    generators pass reference tests;
 4. gradient, HSV, palette and tint/intensity generators are available and
    bounded;
-5. four standard AnimationTrack properties on `ControlSignalTarget` can be
-   edited and animated;
+5. arbitrary configured manual channels can be edited in Timeline Curves View
+   and independently reused with any provider track;
 6. manual and XAS values remain distinct graph inputs and combine only through
    authored graph operations;
 7. overlapping manual animation clips use normalized Timeline weighting;
@@ -805,14 +934,14 @@ Phase 8 is complete when:
 
 The Phase 8 contracts should allow, but do not include:
 
-- more than four standard animatable manual inputs;
-- custom Timeline curve-track UI;
+- custom Timeline keyframe/curve editor UI;
 - Quaternion/Matrix/Texture/object signals;
 - runtime-authored curves;
 - spatial path or spline signal types;
 - vector/color subgraphs and reusable graph libraries;
 - graph live visualization;
 - automatic material or component reflection bindings;
-- automatic discovery of arbitrary AnimationTrack properties;
+- dynamically generated C# fields or arbitrary binding paths beyond the stable
+  channel registry;
 - Phase 9 XR/provider interaction.
 

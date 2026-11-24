@@ -723,11 +723,12 @@ slice, is in
 Extend the control graph with Vector2, Vector3 and Color values. Add
 parameterized scalar-to-vector and scalar-to-color generators, including
 polar, cylindrical, spherical, direction/length, oscillator/noise/Brownian and
-gradient/HSV/palette/tint operations. Use standard AnimationTracks to drive
-manual float inputs on the control target, keeping those manual signals
-separate from XAS/provider values so the graph controls combination semantics.
+gradient/HSV/palette/tint operations. Use a custom `ManualControlTrack` whose
+clips expose named float values through Timeline's built-in Curves View,
+keeping manual signals separate from XAS/provider values so the graph controls
+combination semantics.
 
-The completion slice is one Timeline with XAS and manual AnimationTrack clips
+The completion slice is one Timeline with XAS and manual-control curve clips
 driving Vector2, Vector3 and Color outputs into a generic typed consumer.
 
 See the detailed implementation plan in
