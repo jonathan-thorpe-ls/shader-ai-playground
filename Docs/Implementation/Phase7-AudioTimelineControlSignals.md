@@ -991,5 +991,5 @@ The Phase 7 contracts should allow, but do not include:
 - variable XAS event types beyond peak channels;
 - automatic graph input discovery from future XAS streams;
 - runtime graph visualization and per-wire previews;
-- Phase 8 XR targets and mixed audio/interaction graphs;
+- Phase 9 XR targets and mixed audio/interaction graphs;
 - custom Timeline clip/track visuals.

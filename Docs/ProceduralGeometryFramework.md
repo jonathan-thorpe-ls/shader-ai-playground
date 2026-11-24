@@ -588,7 +588,7 @@ cost, GPU work where available, dispatch count, buffer sizes, allocation churn,
 substep count and dropped simulation time. Regression is measured against the
 same representative scenes and presets.
 
-Performance work is not deferred until Phase 9. Phase 9 consolidates
+Performance work is not deferred until Phase 10. Phase 10 consolidates
 cross-backend baselines, tooling and final polish; each earlier phase must prove
 that its new runtime path is viable at real time. Quality controls that add
 work must be bounded, preset-based or LOD-aware rather than allowing unchecked
@@ -718,11 +718,26 @@ Toolkit compilation, control-slot routing and the single-renderer vertical
 slice, is in
 [Phase7-AudioTimelineControlSignals.md](Implementation/Phase7-AudioTimelineControlSignals.md).
 
-### Phase 8 — VR interaction
+### Phase 8 — Hybrid Timeline and typed control signals
+
+Extend the control graph with Vector2, Vector3 and Color values. Add
+parameterized scalar-to-vector and scalar-to-color generators, including
+polar, cylindrical, spherical, direction/length, oscillator/noise/Brownian and
+gradient/HSV/palette/tint operations. Use standard AnimationTracks to drive
+manual float inputs on the control target, keeping those manual signals
+separate from XAS/provider values so the graph controls combination semantics.
+
+The completion slice is one Timeline with XAS and manual AnimationTrack clips
+driving Vector2, Vector3 and Color outputs into a generic typed consumer.
+
+See the detailed implementation plan in
+[Phase8-HybridTimelineVectorColorControls.md](Implementation/Phase8-HybridTimelineVectorColorControls.md).
+
+### Phase 9 — VR interaction
 
 Introduce provider-independent interaction sources, fields, events and grab constraints. Start with one fingertip touching/pushing a grid, then add pinch, hit, grab and two-hand interaction, with a spatial broad phase and haptics/feedback.
 
-### Phase 9 — Hardening and visual development
+### Phase 10 — Hardening and visual development
 
 Complete cross-backend tests, performance baselines, memory reports, render-graph integration, motion vectors, CI/GPU-agent coverage, samples, reference captures and user-facing editor tools.
 
@@ -745,9 +760,11 @@ Phase 6: Branching graphs and branch path deformation
     |
 Phase 7: Audio control
     |
-Phase 8: VR interaction
+Phase 8: Hybrid manual/audio vector and color control
     |
-Phase 9: Hardening, performance and polish
+Phase 9: VR interaction
+    |
+Phase 10: Hardening, performance and polish
 ```
 
 Do not add a later generator merely to provide a test for an unfinished solver. Use the simplest existing topology that proves the next architectural capability:

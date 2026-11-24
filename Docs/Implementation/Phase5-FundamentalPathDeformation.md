@@ -80,7 +80,7 @@ paths must all use the same runtime path resource and deformation pipeline.
 ### 2.2 Explicitly out of scope
 
 - Audio analysis or mappings; Phase 7 consumes path controls.
-- XR/provider interaction; Phase 8 supplies controls and constraints.
+- XR/provider interaction; Phase 9 supplies controls and constraints.
 - Branching junction deformation; Phase 6 generalises the resource to a
   graph-of-paths.
 - Regenerating path topology, sample count or tube connectivity per frame.

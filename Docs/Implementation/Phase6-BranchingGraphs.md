@@ -84,7 +84,7 @@ same deformation primitives.
 - Physical collision, self-collision or full torsion/rod dynamics.
 - Particle networks, spatial grids, Voronoi and cyclic arbitrary graphs.
 - Audio mapping; Phase 7 supplies controls to the path deformers.
-- XR/provider interaction; Phase 8 supplies spatial inputs and constraints.
+- XR/provider interaction; Phase 9 supplies spatial inputs and constraints.
 - A dedicated runtime control panel. Test scenes use component inspectors.
 - Per-frame GPU-to-CPU position, hierarchy or neighbour readback.
 
@@ -677,4 +677,4 @@ Phase 6 is complete when:
     have no boundary vertices;
 14. no runtime branch update performs readback or topology rebuilding;
 15. audio remains an input to branch path controls for Phase 7, while XR remains
-    an input for Phase 8.
+    an input for Phase 9.
