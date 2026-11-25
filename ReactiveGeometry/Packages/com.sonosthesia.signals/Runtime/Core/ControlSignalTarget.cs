@@ -16,9 +16,6 @@ namespace Sonosthesia.Signals
         private float[] _pulseStrengths;
         private float[] _pulseMagnitudes;
         private byte[] _pulseStarted;
-        private int[] _continuousSourceMap;
-        private int[] _pulseSourceMap;
-        private ControlSignalProfile _mappedSourceProfile;
         private ControlSignalFrame _lastFrame;
         private bool _hasFrame;
         private bool _bindingsValid;
@@ -128,6 +125,45 @@ namespace Sonosthesia.Signals
             return TryGetOutput(outputIndex, out value, out pulse);
         }
 
+        public bool TryGetOutput(int outputIndex, out Vector2 value)
+        {
+            if (_executor == null)
+            {
+                value = default;
+                return false;
+            }
+            return _executor.TryGetOutput(outputIndex, out value);
+        }
+
+        public bool TryGetOutput(int outputIndex, out Vector3 value)
+        {
+            if (_executor == null)
+            {
+                value = default;
+                return false;
+            }
+            return _executor.TryGetOutput(outputIndex, out value);
+        }
+
+        public bool TryGetOutput(int outputIndex, out Color value)
+        {
+            if (_executor == null)
+            {
+                value = default;
+                return false;
+            }
+            return _executor.TryGetOutput(outputIndex, out value);
+        }
+
+        public bool TryGetOutput(ControlSignalId id, out Vector2 value) =>
+            TryGetTypedOutput(id, out value);
+
+        public bool TryGetOutput(ControlSignalId id, out Vector3 value) =>
+            TryGetTypedOutput(id, out value);
+
+        public bool TryGetOutput(ControlSignalId id, out Color value) =>
+            TryGetTypedOutput(id, out value);
+
         private void OnEnable()
         {
             Rebuild();
@@ -165,9 +201,11 @@ namespace Sonosthesia.Signals
             _pulseStrengths = new float[pulseCount];
             _pulseMagnitudes = new float[pulseCount];
             _pulseStarted = new byte[pulseCount];
-            _continuousSourceMap = new int[continuousCount];
-            _pulseSourceMap = new int[pulseCount];
-            _mappedSourceProfile = null;
+            Array.Clear(_continuousInput, 0, _continuousInput.Length);
+            Array.Clear(_continuousAvailable, 0, _continuousAvailable.Length);
+            Array.Clear(_pulseStrengths, 0, _pulseStrengths.Length);
+            Array.Clear(_pulseMagnitudes, 0, _pulseMagnitudes.Length);
+            Array.Clear(_pulseStarted, 0, _pulseStarted.Length);
             int routeCapacity = routes?.Length ?? 0;
             if (routeCapacity == 0)
             {
@@ -215,6 +253,19 @@ namespace Sonosthesia.Signals
                         this);
                     continue;
                 }
+                if ((output.Type == ControlSignalType.Vector2
+                     && target is not IControlVector2SlotTarget)
+                    || (output.Type == ControlSignalType.Vector3
+                        && target is not IControlVector3SlotTarget)
+                    || (output.Type == ControlSignalType.Color
+                        && target is not IControlColorSlotTarget))
+                {
+                    Debug.LogError(
+                        $"Control target for '{binding.SlotName}' does not implement " +
+                        $"the required {output.Type} writer.",
+                        this);
+                    continue;
+                }
 
                 resolved[count++] = new ResolvedRoute(
                     target,
@@ -236,43 +287,97 @@ namespace Sonosthesia.Signals
             for (int index = 0; index < _resolvedRoutes.Length; index++)
             {
                 ResolvedRoute route = _resolvedRoutes[index];
-                if (!_executor.TryGetOutput(route.OutputIndex, out float value, out ControlPulse pulse))
-                    continue;
-
-                if (route.Type == ControlSignalType.Continuous)
+                if (route.Type == ControlSignalType.Continuous
+                    || route.Type == ControlSignalType.Pulse)
                 {
-                    route.Target.WriteFloat(
-                        route.SlotHandle,
-                        value * route.Gain + route.Bias);
+                    if (!_executor.TryGetOutput(route.OutputIndex, out float value, out ControlPulse pulse))
+                        continue;
+                    if (route.Type == ControlSignalType.Continuous)
+                    {
+                        route.Target.WriteFloat(
+                            route.SlotHandle,
+                            value * route.Gain + route.Bias);
+                    }
+                    else
+                    {
+                        var routedPulse = new ControlPulse(
+                            pulse.Strength * route.Gain + route.Bias,
+                            pulse.Magnitude * route.Gain + route.Bias,
+                            pulse.Started);
+                        route.Target.WritePulse(route.SlotHandle, routedPulse);
+                    }
                 }
-                else
+                else if (route.Type == ControlSignalType.Vector2)
                 {
-                    var routedPulse = new ControlPulse(
-                        pulse.Strength * route.Gain + route.Bias,
-                        pulse.Magnitude * route.Gain + route.Bias,
-                        pulse.Started);
-                    route.Target.WritePulse(route.SlotHandle, routedPulse);
+                    if (_executor.TryGetOutput(route.OutputIndex, out Vector2 value)
+                        && route.Target is IControlVector2SlotTarget target)
+                    {
+                        target.WriteVector2(
+                            route.SlotHandle,
+                            value * route.Gain + Vector2.one * route.Bias);
+                    }
+                }
+                else if (route.Type == ControlSignalType.Vector3)
+                {
+                    if (_executor.TryGetOutput(route.OutputIndex, out Vector3 value)
+                        && route.Target is IControlVector3SlotTarget target)
+                    {
+                        target.WriteVector3(
+                            route.SlotHandle,
+                            value * route.Gain + Vector3.one * route.Bias);
+                    }
+                }
+                else if (route.Type == ControlSignalType.Color)
+                {
+                    if (_executor.TryGetOutput(route.OutputIndex, out Color value)
+                        && route.Target is IControlColorSlotTarget target)
+                    {
+                        value = new Color(
+                            value.r * route.Gain + route.Bias,
+                            value.g * route.Gain + route.Bias,
+                            value.b * route.Gain + route.Bias,
+                            value.a);
+                        target.WriteColor(route.SlotHandle, value);
+                    }
                 }
             }
+        }
+
+        private bool TryGetTypedOutput(ControlSignalId id, out Vector2 value)
+        {
+            value = default;
+            return graph != null
+                   && graph.TryGetOutputIndex(id, out int index)
+                   && TryGetOutput(index, out value);
+        }
+
+        private bool TryGetTypedOutput(ControlSignalId id, out Vector3 value)
+        {
+            value = default;
+            return graph != null
+                   && graph.TryGetOutputIndex(id, out int index)
+                   && TryGetOutput(index, out value);
+        }
+
+        private bool TryGetTypedOutput(ControlSignalId id, out Color value)
+        {
+            value = default;
+            return graph != null
+                   && graph.TryGetOutputIndex(id, out int index)
+                   && TryGetOutput(index, out value);
         }
 
         private void BuildExecutorFrame(
             in ControlSignalFrame source,
             out ControlSignalFrame executorFrame)
         {
-            Array.Clear(_continuousInput, 0, _continuousInput.Length);
-            Array.Clear(_continuousAvailable, 0, _continuousAvailable.Length);
-            Array.Clear(_pulseStrengths, 0, _pulseStrengths.Length);
-            Array.Clear(_pulseMagnitudes, 0, _pulseMagnitudes.Length);
-            Array.Clear(_pulseStarted, 0, _pulseStarted.Length);
-
             if (source.Profile != null)
             {
-                EnsureProfileMap(source.Profile);
                 for (int index = 0; index < graph.Profile.ContinuousCount; index++)
                 {
-                    int sourceIndex = _continuousSourceMap[index];
-                    if (sourceIndex < 0
+                    ControlSignalDescriptor descriptor = graph.Profile.GetContinuous(index);
+                    if (!source.Profile.TryGetContinuousIndex(descriptor.Id, out int sourceIndex)
+                        || sourceIndex < 0
                         || (uint)sourceIndex >= (uint)(source.ContinuousValues?.Length ?? 0))
                     {
                         continue;
@@ -287,8 +392,9 @@ namespace Sonosthesia.Signals
 
                 for (int index = 0; index < graph.Profile.PulseCount; index++)
                 {
-                    int sourceIndex = _pulseSourceMap[index];
-                    if (sourceIndex < 0)
+                    ControlSignalDescriptor descriptor = graph.Profile.GetPulse(index);
+                    if (!source.Profile.TryGetPulseIndex(descriptor.Id, out int sourceIndex)
+                        || sourceIndex < 0)
                         continue;
                     if (sourceIndex < (source.PulseStrengths?.Length ?? 0))
                         _pulseStrengths[index] = source.PulseStrengths[sourceIndex];
@@ -310,24 +416,6 @@ namespace Sonosthesia.Signals
                 _pulseStrengths,
                 _pulseMagnitudes,
                 _pulseStarted);
-        }
-
-        private void EnsureProfileMap(ControlSignalProfile profile)
-        {
-            if (ReferenceEquals(profile, _mappedSourceProfile))
-                return;
-
-            for (int index = 0; index < _continuousSourceMap.Length; index++)
-            {
-                ControlSignalDescriptor descriptor = graph.Profile.GetContinuous(index);
-                profile.TryGetContinuousIndex(descriptor.Id, out _continuousSourceMap[index]);
-            }
-            for (int index = 0; index < _pulseSourceMap.Length; index++)
-            {
-                ControlSignalDescriptor descriptor = graph.Profile.GetPulse(index);
-                profile.TryGetPulseIndex(descriptor.Id, out _pulseSourceMap[index]);
-            }
-            _mappedSourceProfile = profile;
         }
 
         private static ResolvedRoute[] TrimRoutes(ResolvedRoute[] routes, int count)

@@ -12,12 +12,22 @@ namespace Sonosthesia.Signals.Editor
     public interface IControlRuntimeNode
     {
         ControlOperationKind Kind { get; }
+        ControlSignalType OutputType { get; }
         int FloatStateCount { get; }
+        int ControlStateComponentCount { get; }
         bool UsesIntegerState { get; }
         IEnumerable<IPort> GetRequiredInputs();
         ControlOperation CreateOperation(
             int inputA,
             int inputB,
+            int sourceIndex,
+            int stateOffset,
+            int integerStateOffset);
+        ControlOperation CreateOperation(
+            int inputA,
+            int inputB,
+            int inputC,
+            int inputD,
             int sourceIndex,
             int stateOffset,
             int integerStateOffset);
@@ -33,7 +43,12 @@ namespace Sonosthesia.Signals.Editor
         internal const string OutputName = "Value";
 
         public abstract ControlOperationKind Kind { get; }
+        public virtual ControlSignalType OutputType => ControlSignalType.Continuous;
         public virtual int FloatStateCount => 0;
+        public virtual int ControlStateComponentCount =>
+            Kind == ControlOperationKind.Delay
+                ? FloatStateCount
+                : FloatStateCount > 0 ? 1 : 0;
         public virtual bool UsesIntegerState => false;
         public virtual string SourceName => null;
         public virtual ControlSignalType SourceType => ControlSignalType.Continuous;
@@ -63,6 +78,24 @@ namespace Sonosthesia.Signals.Editor
                 SourceIndex = sourceIndex,
                 StateOffset = stateOffset
             };
+        }
+
+        public virtual ControlOperation CreateOperation(
+            int inputA,
+            int inputB,
+            int inputC,
+            int inputD,
+            int sourceIndex,
+            int stateOffset,
+            int integerStateOffset)
+        {
+            ControlOperation operation = CreateOperation(
+                inputA, inputB, sourceIndex, stateOffset, integerStateOffset);
+            operation.InputC = inputC;
+            operation.InputD = inputD;
+            operation.OutputType = OutputType;
+            operation.StateComponentCount = ControlStateComponentCount;
+            return operation;
         }
 
         protected T ReadOption<T>(string name, T fallback)
@@ -104,6 +137,7 @@ namespace Sonosthesia.Signals.Editor
         private const string SignalOption = "Signal";
         public override string SourceName => ReadOption(SignalOption, "pulse");
         public override ControlSignalType SourceType => ControlSignalType.Pulse;
+        public override ControlSignalType OutputType => ControlSignalType.Pulse;
 
         protected override void OnDefineOptions(IOptionDefinitionContext context)
         {
@@ -188,6 +222,27 @@ namespace Sonosthesia.Signals.Editor
             context.AddInputPort<float>(InputAName).WithCapacity(PortCapacity.Single).Build();
             context.AddInputPort<float>(InputBName).WithCapacity(PortCapacity.Single).Build();
             context.AddOutputPort<float>(OutputName).WithCapacity(PortCapacity.Multi).Build();
+        }
+    }
+
+    [Serializable]
+    public abstract class UnaryControlNode<TValue> : ControlRuntimeNode
+    {
+        protected override void OnDefinePorts(IPortDefinitionContext context)
+        {
+            context.AddInputPort<TValue>(InputAName).WithCapacity(PortCapacity.Single).Build();
+            context.AddOutputPort<TValue>(OutputName).WithCapacity(PortCapacity.Multi).Build();
+        }
+    }
+
+    [Serializable]
+    public abstract class BinaryControlNode<TValue> : ControlRuntimeNode
+    {
+        protected override void OnDefinePorts(IPortDefinitionContext context)
+        {
+            context.AddInputPort<TValue>(InputAName).WithCapacity(PortCapacity.Single).Build();
+            context.AddInputPort<TValue>(InputBName).WithCapacity(PortCapacity.Single).Build();
+            context.AddOutputPort<TValue>(OutputName).WithCapacity(PortCapacity.Multi).Build();
         }
     }
 

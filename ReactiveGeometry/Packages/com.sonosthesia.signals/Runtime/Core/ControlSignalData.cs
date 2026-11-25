@@ -6,7 +6,10 @@ namespace Sonosthesia.Signals
     public enum ControlSignalType
     {
         Continuous = 0,
-        Pulse = 1
+        Pulse = 1,
+        Vector2 = 2,
+        Vector3 = 3,
+        Color = 4
     }
 
     public enum ControlPlaybackDirection : byte
@@ -180,6 +183,36 @@ namespace Sonosthesia.Signals
             Magnitude = magnitude;
             Started = started;
         }
+
+    }
+
+    [Serializable]
+    public struct ControlValue
+    {
+        public float X;
+        public float Y;
+        public float Z;
+        public float W;
+
+        public ControlValue(float x, float y = 0f, float z = 0f, float w = 0f)
+        {
+            X = x;
+            Y = y;
+            Z = z;
+            W = w;
+        }
+
+        public static implicit operator ControlValue(float value) => new(value);
+        public static ControlValue From(Vector2 value) => new(value.x, value.y);
+        public static ControlValue From(Vector3 value) => new(value.x, value.y, value.z);
+        public static ControlValue From(Color value) => new(value.r, value.g, value.b, value.a);
+        public static Vector2 ToVector2(ControlValue value) => new(value.X, value.Y);
+        public static Vector3 ToVector3(ControlValue value) => new(value.X, value.Y, value.Z);
+        public static Color ToColor(ControlValue value) => new(value.X, value.Y, value.Z, value.W);
+        public static ControlValue DefaultFor(ControlSignalType type)
+        {
+            return type == ControlSignalType.Color ? new ControlValue(0f, 0f, 0f, 1f) : default;
+        }
     }
 
     public interface IControlSignalProvider
@@ -202,5 +235,20 @@ namespace Sonosthesia.Signals
         ControlSignalType GetControlSlotType(int slotHandle);
         void WriteFloat(int slotHandle, float value);
         void WritePulse(int slotHandle, in ControlPulse pulse);
+    }
+
+    public interface IControlVector2SlotTarget
+    {
+        void WriteVector2(int slotHandle, Vector2 value);
+    }
+
+    public interface IControlVector3SlotTarget
+    {
+        void WriteVector3(int slotHandle, Vector3 value);
+    }
+
+    public interface IControlColorSlotTarget
+    {
+        void WriteColor(int slotHandle, Color value);
     }
 }

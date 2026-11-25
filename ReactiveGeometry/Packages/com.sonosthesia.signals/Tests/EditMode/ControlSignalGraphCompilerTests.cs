@@ -65,5 +65,44 @@ namespace Sonosthesia.Signals.Tests
                 runtime.Profile.GetContinuous(0).Name,
                 Is.EqualTo("provider.test"));
         }
+
+        [Test]
+        public void Importer_CompilesMixedScalarToColorGraph()
+        {
+            string path = Root + "/Typed.controlgraph";
+            ControlSignalGraph graph = GraphDatabase.CreateGraph<ControlSignalGraph>(path);
+            graph.UndoBeginRecordGraph("Build typed Phase 8 graph");
+
+            var hue = new ConstantNode { Position = new Vector2(0, 0) };
+            var saturation = new ConstantNode { Position = new Vector2(0, 80) };
+            var value = new ConstantNode { Position = new Vector2(0, 160) };
+            var hsv = new HsvNode { Position = new Vector2(300, 80) };
+            var output = new ColorControlOutputNode { Position = new Vector2(600, 80) };
+            graph.AddNode(hue);
+            graph.AddNode(saturation);
+            graph.AddNode(value);
+            graph.AddNode(hsv);
+            graph.AddNode(output);
+            hue.GetNodeOptionByName("Value").TrySetValue(0f);
+            saturation.GetNodeOptionByName("Value").TrySetValue(1f);
+            value.GetNodeOptionByName("Value").TrySetValue(1f);
+            output.GetNodeOptionByName("Name").TrySetValue("typed.color");
+            graph.Connect(hue.GetOutputPortByName("Value"), hsv.GetInputPortByName("Hue"));
+            graph.Connect(saturation.GetOutputPortByName("Value"), hsv.GetInputPortByName("Saturation"));
+            graph.Connect(value.GetOutputPortByName("Value"), hsv.GetInputPortByName("Value"));
+            graph.Connect(hsv.GetOutputPortByName("Value"), output.GetInputPortByName("Value"));
+
+            GraphDatabase.SaveGraph(graph);
+            graph.UndoEndRecordGraph();
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
+
+            var runtime = AssetDatabase.LoadMainAssetAtPath(path) as CompiledControlGraph;
+            Assert.That(runtime, Is.Not.Null);
+            Assert.That(runtime.OutputCount, Is.EqualTo(1));
+            Assert.That(runtime.GetOutput(0).Type, Is.EqualTo(ControlSignalType.Color));
+            Assert.That(runtime.GetOperation(runtime.OperationCount - 1).OutputType,
+                Is.EqualTo(ControlSignalType.Color));
+            AssetDatabase.DeleteAsset(path);
+        }
     }
 }

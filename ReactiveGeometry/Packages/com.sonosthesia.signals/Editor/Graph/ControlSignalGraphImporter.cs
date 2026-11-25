@@ -7,7 +7,7 @@ using UnityEngine;
 
 namespace Sonosthesia.Signals.Editor
 {
-    [ScriptedImporter(1, ControlSignalGraph.AssetExtension)]
+    [ScriptedImporter(2, ControlSignalGraph.AssetExtension)]
     public sealed class ControlSignalGraphImporter : ScriptedImporter
     {
         public override void OnImportAsset(AssetImportContext context)
@@ -94,7 +94,16 @@ namespace Sonosthesia.Signals.Editor
                         $"Output '{name}' is not connected.",
                         output);
 
-                int operationIndex = CompileNode(input.FirstConnectedPort.GetNode());
+                INode upstream = input.FirstConnectedPort.GetNode();
+                if (upstream is IControlRuntimeNode runtimeUpstream
+                    && runtimeUpstream.OutputType != output.SignalType)
+                {
+                    throw new ControlGraphCompileException(
+                        $"Output '{name}' expects {output.SignalType} but is connected " +
+                        $"to {runtimeUpstream.OutputType}.",
+                        output);
+                }
+                int operationIndex = CompileNode(upstream);
                 runtimeOutputs.Add(new ControlGraphOutput
                 {
                     Name = name,
@@ -140,8 +149,16 @@ namespace Sonosthesia.Signals.Editor
                     node);
             }
 
-            int inputA = CompileRequiredInput(node, "A");
-            int inputB = CompileRequiredInput(node, "B");
+            int[] inputs = new int[4];
+            Array.Fill(inputs, -1);
+            if (node.InputPortCount > inputs.Length)
+                throw new ControlGraphCompileException(
+                    $"Node '{node.Title}' has more than four runtime inputs.",
+                    node);
+            for (int index = 0; index < node.InputPortCount; index++)
+            {
+                inputs[index] = CompileInput(node, node.GetInputPort(index));
+            }
             int sourceIndex = -1;
             if (!string.IsNullOrWhiteSpace(runtimeNode.SourceName))
             {
@@ -151,15 +168,17 @@ namespace Sonosthesia.Signals.Editor
             }
 
             int stateOffset = _floatStateCount;
-            _floatStateCount += runtimeNode.FloatStateCount;
+            _floatStateCount += runtimeNode.ControlStateComponentCount;
             int integerOffset = _integerStateCount;
             if (runtimeNode.UsesIntegerState)
                 _integerStateCount++;
 
             int operationIndex = _operations.Count;
             _operations.Add(runtimeNode.CreateOperation(
-                inputA,
-                inputB,
+                inputs[0],
+                inputs[1],
+                inputs[2],
+                inputs[3],
                 sourceIndex,
                 stateOffset,
                 integerOffset));
@@ -168,9 +187,8 @@ namespace Sonosthesia.Signals.Editor
             return operationIndex;
         }
 
-        private int CompileRequiredInput(INode node, string portName)
+        private int CompileInput(INode node, IPort port)
         {
-            IPort port = node.GetInputPortByName(portName);
             if (port == null)
                 return -1;
             if (!port.IsConnected)
@@ -185,7 +203,29 @@ namespace Sonosthesia.Signals.Editor
                 return -1;
             }
 
-            return CompileNode(port.FirstConnectedPort.GetNode());
+            INode upstream = port.FirstConnectedPort.GetNode();
+            if (upstream is IControlRuntimeNode runtimeUpstream
+                && !IsCompatible(port.DataType, runtimeUpstream.OutputType))
+            {
+                throw new ControlGraphCompileException(
+                    $"Input '{port.DisplayName}' on '{node.Title}' expects " +
+                    $"{port.DataType?.Name ?? "Untyped"}.",
+                    port);
+            }
+            return CompileNode(upstream);
+        }
+
+        private static bool IsCompatible(Type portType, ControlSignalType outputType)
+        {
+            if (outputType == ControlSignalType.Continuous)
+                return portType == typeof(float);
+            if (outputType == ControlSignalType.Pulse)
+                return portType == typeof(PulsePort);
+            if (outputType == ControlSignalType.Vector2)
+                return portType == typeof(Vector2);
+            if (outputType == ControlSignalType.Vector3)
+                return portType == typeof(Vector3);
+            return outputType == ControlSignalType.Color && portType == typeof(Color);
         }
 
         private int RegisterSource(string name, ControlSignalType type)

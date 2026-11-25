@@ -1,0 +1,25 @@
+{
+  "name": "Sonosthesia.Signals.Timeline.Tests.EditMode",
+  "rootNamespace": "Sonosthesia.Signals.Timeline.Tests",
+  "references": [
+    "Sonosthesia.Signals.Runtime",
+    "Sonosthesia.Signals.Timeline.Runtime",
+    "Unity.Timeline"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "versionDefines": [],
+  "noEngineReferences": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

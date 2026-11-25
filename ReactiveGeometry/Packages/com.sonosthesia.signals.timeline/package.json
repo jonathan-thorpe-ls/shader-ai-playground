@@ -1,0 +1,12 @@
+{
+  "name": "com.sonosthesia.signals.timeline",
+  "displayName": "Sonosthesia Manual Curve Signals",
+  "version": "0.1.0",
+  "unity": "6000.6",
+  "description": "Named manual float curves for provider-neutral Sonosthesia control signals.",
+  "dependencies": {
+    "com.sonosthesia.signals": "0.1.0",
+    "com.unity.test-framework": "1.8.0",
+    "com.unity.timeline": "6.6.0"
+  }
+}

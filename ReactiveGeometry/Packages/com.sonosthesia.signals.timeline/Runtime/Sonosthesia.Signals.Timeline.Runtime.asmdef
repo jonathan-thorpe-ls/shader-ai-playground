@@ -1,0 +1,17 @@
+{
+  "name": "Sonosthesia.Signals.Timeline.Runtime",
+  "rootNamespace": "Sonosthesia.Signals.Timeline",
+  "references": [
+    "Sonosthesia.Signals.Runtime",
+    "Unity.Timeline"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

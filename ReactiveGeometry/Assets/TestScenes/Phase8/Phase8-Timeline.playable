@@ -1,0 +1,730 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &-9059630862874161737
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.2
+  signalName: manual.angle3
+  clipDuration: 1
+--- !u!114 &-8520772948192539644
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 017787e30fe20d1479482dcd48078d2f, type: 3}
+  m_Name: Manual Curves
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlTrack
+  m_Version: 3
+  m_AnimClip: {fileID: 0}
+  m_Locked: 0
+  m_Muted: 0
+  m_CustomPlayableFullTypename: 
+  m_Curves: {fileID: 0}
+  m_Parent: {fileID: 11400000}
+  m_Children: []
+  m_Clips:
+  - m_Version: 1
+    m_Start: 0
+    m_ClipIn: 0
+    m_Asset: {fileID: 8427948044137413275}
+    m_Duration: 1.9946666666666666
+    m_TimeScale: 1
+    m_ParentTrack: {fileID: -8520772948192539644}
+    m_EaseInDuration: 0
+    m_EaseOutDuration: 0
+    m_BlendInDuration: -1
+    m_BlendOutDuration: 1.9946666666666666
+    m_MixInCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_MixOutCurve:
+      serializedVersion: 2
+      m_Curve: []
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_BlendInCurveMode: 0
+    m_BlendOutCurveMode: 0
+    m_ExposedParameterNames: []
+    m_AnimationCurves: {fileID: 0}
+    m_Recordable: 0
+    m_PostExtrapolationMode: 0
+    m_PreExtrapolationMode: 0
+    m_PostExtrapolationTime: 0
+    m_PreExtrapolationTime: 0
+    m_DisplayName: manual.radius
+  - m_Version: 1
+    m_Start: 0
+    m_ClipIn: 0
+    m_Asset: {fileID: -4546668830085777946}
+    m_Duration: 1.9946666666666666
+    m_TimeScale: 1
+    m_ParentTrack: {fileID: -8520772948192539644}
+    m_EaseInDuration: 0
+    m_EaseOutDuration: 0
+    m_BlendInDuration: 1.9946666666666666
+    m_BlendOutDuration: 1.9946666666666666
+    m_MixInCurve:
+      serializedVersion: 2
+      m_Curve: []
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_MixOutCurve:
+      serializedVersion: 2
+      m_Curve: []
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_BlendInCurveMode: 0
+    m_BlendOutCurveMode: 0
+    m_ExposedParameterNames: []
+    m_AnimationCurves: {fileID: 0}
+    m_Recordable: 0
+    m_PostExtrapolationMode: 0
+    m_PreExtrapolationMode: 0
+    m_PostExtrapolationTime: 0
+    m_PreExtrapolationTime: 0
+    m_DisplayName: manual.angle
+  - m_Version: 1
+    m_Start: 0
+    m_ClipIn: 0
+    m_Asset: {fileID: 5733311272931027538}
+    m_Duration: 1.9946666666666666
+    m_TimeScale: 1
+    m_ParentTrack: {fileID: -8520772948192539644}
+    m_EaseInDuration: 0
+    m_EaseOutDuration: 0
+    m_BlendInDuration: 1.9946666666666666
+    m_BlendOutDuration: 1.9946666666666666
+    m_MixInCurve:
+      serializedVersion: 2
+      m_Curve: []
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_MixOutCurve:
+      serializedVersion: 2
+      m_Curve: []
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_BlendInCurveMode: 0
+    m_BlendOutCurveMode: 0
+    m_ExposedParameterNames: []
+    m_AnimationCurves: {fileID: 0}
+    m_Recordable: 0
+    m_PostExtrapolationMode: 0
+    m_PreExtrapolationMode: 0
+    m_PostExtrapolationTime: 0
+    m_PreExtrapolationTime: 0
+    m_DisplayName: manual.angle3
+  - m_Version: 1
+    m_Start: 0
+    m_ClipIn: 0
+    m_Asset: {fileID: 1899139317319399097}
+    m_Duration: 1.9946666666666666
+    m_TimeScale: 1
+    m_ParentTrack: {fileID: -8520772948192539644}
+    m_EaseInDuration: 0
+    m_EaseOutDuration: 0
+    m_BlendInDuration: 1.9946666666666666
+    m_BlendOutDuration: 1.9946666666666666
+    m_MixInCurve:
+      serializedVersion: 2
+      m_Curve: []
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_MixOutCurve:
+      serializedVersion: 2
+      m_Curve: []
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_BlendInCurveMode: 0
+    m_BlendOutCurveMode: 0
+    m_ExposedParameterNames: []
+    m_AnimationCurves: {fileID: 0}
+    m_Recordable: 0
+    m_PostExtrapolationMode: 0
+    m_PreExtrapolationMode: 0
+    m_PostExtrapolationTime: 0
+    m_PreExtrapolationTime: 0
+    m_DisplayName: manual.height
+  - m_Version: 1
+    m_Start: 0
+    m_ClipIn: 0
+    m_Asset: {fileID: -5052822397247934782}
+    m_Duration: 1.9946666666666666
+    m_TimeScale: 1
+    m_ParentTrack: {fileID: -8520772948192539644}
+    m_EaseInDuration: 0
+    m_EaseOutDuration: 0
+    m_BlendInDuration: 1.9946666666666666
+    m_BlendOutDuration: -1
+    m_MixInCurve:
+      serializedVersion: 2
+      m_Curve: []
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_MixOutCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_BlendInCurveMode: 0
+    m_BlendOutCurveMode: 0
+    m_ExposedParameterNames: []
+    m_AnimationCurves: {fileID: 0}
+    m_Recordable: 0
+    m_PostExtrapolationMode: 0
+    m_PreExtrapolationMode: 0
+    m_PostExtrapolationTime: 0
+    m_PreExtrapolationTime: 0
+    m_DisplayName: manual.hue
+  m_Markers:
+    m_Objects: []
+--- !u!114 &-8181227009669989647
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.75
+  signalName: manual.height
+  clipDuration: 1
+--- !u!114 &-7494576224021605928
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef7c89c350c22ac47a06e128d16203aa, type: 3}
+  m_Name: XasPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Xas.Runtime::Sonosthesia.Signals.Xas.XasPlayableAsset
+  source: {fileID: 11400000, guid: 3ca10226265c8264b8ddf0572b11da94, type: 2}
+  sourceTrimSeconds: 0
+  playbackSpeed: 1
+  gain: 1
+  includeEvents: 1
+--- !u!114 &-7450161159841805753
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime:Sonosthesia.Signals.Timeline:ManualControlPlayableAsset
+  template:
+    value: 0.1
+  signalName: manual.hue
+  clipDuration: 1
+--- !u!114 &-6817403050103364876
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.5
+  signalName: manual.radius
+  clipDuration: 1
+--- !u!114 &-6400401550301571397
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef7c89c350c22ac47a06e128d16203aa, type: 3}
+  m_Name: XasPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Xas.Runtime::Sonosthesia.Signals.Xas.XasPlayableAsset
+  source: {fileID: 11400000, guid: 3ca10226265c8264b8ddf0572b11da94, type: 2}
+  sourceTrimSeconds: 0
+  playbackSpeed: 1
+  gain: 1
+  includeEvents: 1
+--- !u!114 &-5052822397247934782
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.1
+  signalName: manual.hue
+  clipDuration: 1
+--- !u!114 &-4546668830085777946
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 1
+  signalName: manual.angle
+  clipDuration: 1
+--- !u!114 &-4216462515233014750
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 42c51fbc1445d244d83b0221033f7841, type: 3}
+  m_Name: XAS Signals
+  m_EditorClassIdentifier: Sonosthesia.Signals.Xas.Runtime::Sonosthesia.Signals.Xas.XasTrack
+  m_Version: 3
+  m_AnimClip: {fileID: 0}
+  m_Locked: 0
+  m_Muted: 0
+  m_CustomPlayableFullTypename: 
+  m_Curves: {fileID: 0}
+  m_Parent: {fileID: 11400000}
+  m_Children: []
+  m_Clips:
+  - m_Version: 1
+    m_Start: 0
+    m_ClipIn: 0
+    m_Asset: {fileID: 6168577034775402807}
+    m_Duration: 1.9946666666666666
+    m_TimeScale: 1
+    m_ParentTrack: {fileID: -4216462515233014750}
+    m_EaseInDuration: 0
+    m_EaseOutDuration: 0
+    m_BlendInDuration: -1
+    m_BlendOutDuration: -1
+    m_MixInCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_MixOutCurve:
+      serializedVersion: 2
+      m_Curve:
+      - serializedVersion: 3
+        time: 0
+        value: 1
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      - serializedVersion: 3
+        time: 1
+        value: 0
+        inSlope: 0
+        outSlope: 0
+        tangentMode: 0
+        weightedMode: 0
+        inWeight: 0
+        outWeight: 0
+      m_PreInfinity: 2
+      m_PostInfinity: 2
+      m_RotationOrder: 4
+    m_BlendInCurveMode: 0
+    m_BlendOutCurveMode: 0
+    m_ExposedParameterNames: []
+    m_AnimationCurves: {fileID: 0}
+    m_Recordable: 0
+    m_PostExtrapolationMode: 0
+    m_PreExtrapolationMode: 0
+    m_PostExtrapolationTime: 0
+    m_PreExtrapolationTime: 0
+    m_DisplayName: XasPlayableAsset
+  m_Markers:
+    m_Objects: []
+--- !u!114 &-4073599797769844481
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.75
+  signalName: manual.height
+  clipDuration: 1
+--- !u!114 &-2958571896454176267
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.5
+  signalName: manual.radius
+  clipDuration: 1
+--- !u!114 &-2285274228343067099
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef7c89c350c22ac47a06e128d16203aa, type: 3}
+  m_Name: XasPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Xas.Runtime::Sonosthesia.Signals.Xas.XasPlayableAsset
+  source: {fileID: 11400000, guid: 3ca10226265c8264b8ddf0572b11da94, type: 2}
+  sourceTrimSeconds: 0
+  playbackSpeed: 1
+  gain: 1
+  includeEvents: 1
+--- !u!114 &-901636710500380534
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.1
+  signalName: manual.hue
+  clipDuration: 1
+--- !u!114 &-226998515274156608
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime:Sonosthesia.Signals.Timeline:ManualControlPlayableAsset
+  template:
+    value: 0.2
+  signalName: manual.angle3
+  clipDuration: 1
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bfda56da833e2384a9677cd3c976a436, type: 3}
+  m_Name: Phase8-Timeline
+  m_EditorClassIdentifier: Unity.Timeline::UnityEngine.Timeline.TimelineAsset
+  m_Version: 0
+  m_Tracks:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: -4216462515233014750}
+  - {fileID: -8520772948192539644}
+  m_FixedDuration: 0
+  m_EditorSettings:
+    m_Framerate: 60
+    m_ScenePreview: 1
+  m_DurationMode: 0
+  m_MarkerTrack: {fileID: 0}
+--- !u!114 &319450756931497878
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 1
+  signalName: manual.angle
+  clipDuration: 1
+--- !u!114 &1353015704332046766
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime:Sonosthesia.Signals.Timeline:ManualControlPlayableAsset
+  template:
+    value: 0.5
+  signalName: manual.radius
+  clipDuration: 1
+--- !u!114 &1360634164583315213
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.2
+  signalName: manual.angle3
+  clipDuration: 1
+--- !u!114 &1899139317319399097
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.75
+  signalName: manual.height
+  clipDuration: 1
+--- !u!114 &3172760302401506937
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.1
+  signalName: manual.hue
+  clipDuration: 1
+--- !u!114 &4820039245596935668
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime:Sonosthesia.Signals.Timeline:ManualControlPlayableAsset
+  template:
+    value: 0.75
+  signalName: manual.height
+  clipDuration: 1
+--- !u!114 &5505703419939547711
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime:Sonosthesia.Signals.Timeline:ManualControlPlayableAsset
+  template:
+    value: 1
+  signalName: manual.angle
+  clipDuration: 1
+--- !u!114 &5733311272931027538
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.2
+  signalName: manual.angle3
+  clipDuration: 1
+--- !u!114 &6168577034775402807
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef7c89c350c22ac47a06e128d16203aa, type: 3}
+  m_Name: XasPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Xas.Runtime::Sonosthesia.Signals.Xas.XasPlayableAsset
+  source: {fileID: 11400000, guid: 3ca10226265c8264b8ddf0572b11da94, type: 2}
+  sourceTrimSeconds: 0
+  playbackSpeed: 1
+  gain: 1
+  includeEvents: 1
+--- !u!114 &7612173587434301274
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 1
+  signalName: manual.angle
+  clipDuration: 1
+--- !u!114 &8427948044137413275
+MonoBehaviour:
+  m_ObjectHideFlags: 1
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6c0b6bc9a355e194f8449b91c62ad9fc, type: 3}
+  m_Name: ManualControlPlayableAsset
+  m_EditorClassIdentifier: Sonosthesia.Signals.Timeline.Runtime::Sonosthesia.Signals.Timeline.ManualControlPlayableAsset
+  template:
+    value: 0.5
+  signalName: manual.radius
+  clipDuration: 1
