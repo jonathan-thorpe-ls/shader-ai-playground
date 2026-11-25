@@ -973,7 +973,9 @@ Create a Phase 8 test scene:
 - one `ManualControlTrack` bound to `ControlSignalTarget`;
 - one named manual curve clip per required manual signal;
 - one `.controlgraph` asset;
-- one `HybridControlConsumer` test component.
+- one `HybridControlConsumer` test component;
+- one scene object with a `MeshRenderer` and a URP Lit material;
+- one `UrpLitColorControlSlot` adapter.
 
 Example graph:
 
@@ -995,17 +997,55 @@ The generic consumer owns typed slots:
 ```text
 hybrid.position2
 hybrid.position3
-hybrid.color
+material.color
 ```
 
-The scene should visibly update a debug transform, line/path gizmo or material
-preview without coupling the implementation to a procedural mesh.
+The color route is an explicit, required visual proof:
+
+```text
+Color Control Output
+        |
+        v
+material.color slot
+        |
+        v
+UrpLitColorControlSlot
+        |
+        v
+Material.SetColor("_BaseColor", value)
+```
+
+`UrpLitColorControlSlot` implements the generic typed slot interfaces and
+targets a specific `Renderer` material slot. It uses a `MaterialPropertyBlock`
+by default so the shared material asset is not mutated during Play Mode. A
+test-scene option may explicitly request an instanced material when a persistent
+visual asset change is desired.
+
+The adapter:
+
+- resolves `Renderer`, material index and `_BaseColor` support once;
+- rejects a shader without `_BaseColor` during binding with a clear warning;
+- writes only the Color slot in the frame loop;
+- allocates no per-frame string, list or boxed value;
+- caches one `MaterialPropertyBlock`;
+- does not depend on XAS, Timeline or the graph runtime.
+
+The scene visibly demonstrates all three typed outputs:
+
+- the Vector2 output updates a 2D marker/debug position or line path;
+- the Vector3 output updates a 3D marker transform;
+- the Color output changes the `_BaseColor` of a visible URP Lit sphere,
+  quad or procedural mesh.
+
+This proves Color routing without coupling the graph to a material or
+procedural geometry implementation.
 
 The UI remains a simple UI Toolkit component inspector:
 
 - active manual channel names and blend weights;
 - current named manual values;
 - latest typed graph outputs;
+- current URP Lit base color;
 - route state;
 - evaluation timing;
 - last discontinuity/reset reason.
@@ -1074,6 +1114,9 @@ objects.
 ### Routing
 
 - Vector2, Vector3 and Color outputs route to a generic target;
+- Color output updates the URP Lit `_BaseColor` through a typed adapter;
+- the adapter preserves the shared material asset by using a
+  `MaterialPropertyBlock`;
 - invalid typed slot binding reports a clear error;
 - legacy float and pulse routes remain operational in the same graph/target;
 - warmed typed routing allocates zero managed bytes.
@@ -1136,11 +1179,13 @@ boundedness.
 
 - Add additive Vector2/Vector3/Color slot interfaces.
 - Add generic `HybridControlConsumer`.
+- Add `UrpLitColorControlSlot` and a visible URP Lit test object.
 - Add Phase 8 ManualControl/XAS/typed-output Timeline demo.
 - Add UI Toolkit inspectors.
 
-**Gate:** one Timeline drives three typed outputs into the same generic
-consumer while XAS and manual inputs remain independently inspectable.
+**Gate:** one Timeline drives three typed outputs: a Vector2 marker, a Vector3
+marker and a visible URP Lit object's `_BaseColor`, while XAS and manual
+inputs remain independently inspectable.
 
 ### M6 - Hardening and performance
 
@@ -1167,6 +1212,7 @@ all previous suites remain green.
 | Manual IDs collide with XAS/provider IDs | target validation rejects duplicate stable IDs |
 | Multiple clips claim the same manual signal unintentionally | same-name overlap is a supported normalized blend; duplicate clip validation remains visible |
 | Existing procedural targets must understand vectors/colors | slot interfaces are additive; no Phase 7 consumer is forced to implement them |
+| URP material color update mutates a shared asset | use a cached `MaterialPropertyBlock` by default and require explicit opt-in for instancing |
 | Color-space conversion produces inconsistent output | define and test linear/RGB/HSV policy explicitly |
 
 ## 17. Definition of done
@@ -1185,13 +1231,16 @@ Phase 8 is complete when:
    authored graph operations;
 7. overlapping manual animation clips use normalized Timeline weighting;
 8. typed values route through allocation-free integer handles;
-9. one hybrid Timeline scene drives Vector2, Vector3 and Color outputs;
-10. arbitrary typed consumers can implement slot interfaces without depending
+9. one hybrid Timeline scene drives Vector2, Vector3 and Color outputs, with
+   the Color value visibly changing a URP Lit material `_BaseColor`;
+10. the URP Lit adapter uses a `MaterialPropertyBlock` by default and does not
+    mutate a shared material asset during Play Mode;
+11. arbitrary typed consumers can implement slot interfaces without depending
     on XAS, Timeline or procedural geometry;
-11. deterministic seek/reverse-scrub behavior is tested;
-12. warmed hybrid evaluation and routing allocate zero managed bytes;
-13. Phase 1-8 EditMode/PlayMode suites pass;
-14. performance and memory results are documented.
+12. deterministic seek/reverse-scrub behavior is tested;
+13. warmed hybrid evaluation and routing allocate zero managed bytes;
+14. Phase 1-8 EditMode/PlayMode suites pass;
+15. performance and memory results are documented.
 
 ## 18. Later work
 
