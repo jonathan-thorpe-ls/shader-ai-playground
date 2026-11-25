@@ -233,6 +233,269 @@ bool TryGetOutput(int index, out Color value);
 Returning the wrong type is a false result or a clearly reported invalid access;
 it must never reinterpret components silently.
 
+### Adapting the current node/compiler/dataflow architecture
+
+The Phase 7 architecture is retained, but its scalar assumptions are removed:
+
+```text
+authoring node type
+    -> IControlRuntimeNode
+    -> ControlOperation records
+    -> fixed ControlValue result array
+    -> typed ControlGraphOutput
+    -> typed control-slot route
+```
+
+#### Authoring templates
+
+Use abstract generic node bases as **Editor-side templates**. They factor out
+ports and common option/compile behavior, but are never instantiated or
+serialized:
+
+```csharp
+[Serializable]
+public abstract class UnaryControlNode<TValue> : ControlRuntimeNode
+{
+    protected override void OnDefinePorts(IPortDefinitionContext context)
+    {
+        context.AddInputPort<TValue>(InputAName)
+            .WithCapacity(PortCapacity.Single)
+            .Build();
+        context.AddOutputPort<TValue>(OutputName)
+            .WithCapacity(PortCapacity.Multi)
+            .Build();
+    }
+}
+
+[Serializable]
+public abstract class BinaryControlNode<TValue> : ControlRuntimeNode
+{
+    protected override void OnDefinePorts(IPortDefinitionContext context)
+    {
+        context.AddInputPort<TValue>(InputAName)
+            .WithCapacity(PortCapacity.Single)
+            .Build();
+        context.AddInputPort<TValue>(InputBName)
+            .WithCapacity(PortCapacity.Single)
+            .Build();
+        context.AddOutputPort<TValue>(OutputName)
+            .WithCapacity(PortCapacity.Multi)
+            .Build();
+    }
+}
+```
+
+Only closed concrete subclasses are discovered and serialized by Graph Toolkit:
+
+```csharp
+[Serializable]
+[Node("Signals/Vector3", null, "Normalize")]
+public sealed class Vector3NormalizeNode : UnaryControlNode<Vector3>
+{
+    public override ControlOperationKind Kind
+        => ControlOperationKind.Vector3Normalize;
+
+    public override ControlSignalType OutputType
+        => ControlSignalType.Vector3;
+}
+
+[Serializable]
+[Node("Signals/Color", null, "Lerp")]
+public sealed class ColorLerpNode : ControlRuntimeNode
+{
+    public override ControlOperationKind Kind
+        => ControlOperationKind.ColorLerp;
+
+    protected override void OnDefinePorts(IPortDefinitionContext context)
+    {
+        context.AddInputPort<Color>("A")
+            .WithCapacity(PortCapacity.Single)
+            .Build();
+        context.AddInputPort<Color>("B")
+            .WithCapacity(PortCapacity.Single)
+            .Build();
+        context.AddInputPort<float>("Amount")
+            .WithCapacity(PortCapacity.Single)
+            .Build();
+        context.AddOutputPort<Color>(OutputName)
+            .WithCapacity(PortCapacity.Multi)
+            .Build();
+    }
+}
+```
+
+Open generic classes remain `abstract`, do not carry `[Node]`, and are not put
+in saved graphs. Concrete classes carry `[Node]`, are `[Serializable]`, and
+override only behavior not supplied by the template:
+
+- `Kind`;
+- `OutputType`;
+- operation-specific ports or options;
+- state/component counts;
+- `CreateOperation`;
+- type-specific validation.
+
+This use of C# `override` is ordinary object-oriented authoring reuse. It is
+not a Timeline override, a Graph Toolkit override clip, or a runtime
+polymorphism mechanism. The concrete saved node and its serialized option
+values are the source of truth.
+
+For nodes with mixed types, such as Polar, Cylindrical or HSV, use an explicit
+base such as `PolarNode` rather than forcing a generic signature. The generic
+base is useful only when the complete port family really is identical.
+
+#### Compiler interface
+
+Replace the scalar-specific assumptions in `IControlRuntimeNode` and
+`ControlRuntimeNode` with type-neutral metadata:
+
+```csharp
+public interface IControlRuntimeNode
+{
+    ControlOperationKind Kind { get; }
+    ControlSignalType OutputType { get; }
+    int ControlStateComponentCount { get; }
+    bool UsesIntegerState { get; }
+
+    IEnumerable<IPort> GetRequiredInputs();
+
+    ControlOperation CreateOperation(
+        int[] inputOperationIndices,
+        int sourceIndex,
+        int stateOffset,
+        int integerStateOffset);
+}
+```
+
+The `int[]` in that sketch belongs to importer-time compilation only. The
+importer stores fixed runtime fields in `ControlOperation`, not the array:
+
+```csharp
+struct ControlOperation
+{
+    ControlOperationKind Kind;
+    ControlSignalType OutputType;
+    int InputA;
+    int InputB;
+    int InputC;
+    int InputD;
+    int SourceIndex;
+    int StateOffset;
+    int StateComponentCount;
+    int DelayCapacity;
+    float ParameterA;
+    float ParameterB;
+    float ParameterC;
+    float ParameterD;
+}
+```
+
+Four runtime input references are sufficient for the planned Phase 8 nodes.
+A node needing more declares multiple operations or is rejected by import.
+The Phase 7 two-input operations continue to compile with unused inputs set to
+`-1`.
+
+The importer still walks upstream ports recursively and produces topological
+order, but now:
+
+1. looks up every named required input;
+2. verifies the upstream `ControlSignalType` expected by the node;
+3. compiles a `ControlOperation` with `InputA` through `InputD`;
+4. records `OutputType`;
+5. allocates state by component count rather than treating state as one float;
+6. leaves no Editor node, generic type or GTK reference in the runtime asset.
+
+#### Runtime value flow
+
+The executor replaces `_values: float[]` with:
+
+```csharp
+ControlValue[] _values;
+```
+
+where:
+
+```csharp
+struct ControlValue
+{
+    float X, Y, Z, W;
+}
+```
+
+`EvaluateOperation` returns `ControlValue`, not `float`. Each operation reads
+one or more `ControlValue` records and writes exactly one `ControlValue`.
+Existing scalar operations are adapted mechanically:
+
+- `Add(float, float)` reads `a.X`, `b.X`;
+- `Pulse` reads strength/magnitude/start lanes;
+- `LowPass` filters `X`;
+- `Vector3Add` adds X, Y and Z;
+- `ColorLerp` interpolates X, Y, Z and W;
+- `Polar` reads scalar angle/radius inputs and writes a Vector2 result.
+
+The runtime does not use `object`, `dynamic`, generic operation dispatch or
+`delegate` calls. The `ControlOperationKind` switch remains the hot-path
+dispatch mechanism.
+
+#### State adaptation
+
+State is allocated in scalar components:
+
+- float filter: 1 component;
+- Vector2 filter: 2 components;
+- Vector3 filter: 3 components;
+- Color filter: 4 components.
+
+Phase 8 Brownian generators are stateless deterministic absolute-time
+functions, so they require no historical state. Delay remains the only
+operation requiring a ring. If Vector3/Color delay is added later, the
+delay capacity is measured in values and storage length is
+`capacity * componentCount`.
+
+#### Outputs and routing
+
+`ControlGraphOutput.Type` now selects a typed read:
+
+```csharp
+TryGetOutput(int outputIndex, out float value);
+TryGetOutput(int outputIndex, out ControlPulse value);
+TryGetOutput(int outputIndex, out Vector2 value);
+TryGetOutput(int outputIndex, out Vector3 value);
+TryGetOutput(int outputIndex, out Color value);
+```
+
+Each overload verifies `ControlGraphOutput.Type` before reading components.
+The existing combined float/pulse method remains for Phase 7 compatibility.
+
+`IControlSlotTarget` still provides stable slot lookup and type discovery.
+Vector and Color transport is added through optional sink interfaces while
+keeping all Phase 7 consumers source-compatible:
+
+```csharp
+IControlVector2SlotTarget
+IControlVector3SlotTarget
+IControlColorSlotTarget
+```
+
+The resolved route stores one `IControlSlotTarget`, integer slot handle,
+operation index and `ControlSignalType`. Routing dispatches directly to the
+appropriate typed interface; no type erasure or reflection is used.
+
+#### Unity 6000.6 type discipline
+
+On Unity 6000.6:
+
+- every port has one concrete data type;
+- each concrete node declares its full port layout;
+- the compiler verifies operation input/output types;
+- the graph does not rely on polymorphic `WithDataTypes`, which is a 6000.7+
+  feature;
+- generic abstract C# bases only generate the concrete port declarations at
+  authoring time.
+
+If a future Unity upgrade enables polymorphic ports, that may reduce the
+number of visible node classes, but it is not a Phase 8 requirement.
+
 ## 7. Manual named-curve track
 
 ### Existing Timeline track candidates
